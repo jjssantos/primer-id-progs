@@ -31,6 +31,7 @@ die "I need a bam file to graph \n". $! unless ($options{bam_file} && (-e $optio
 
 die "I need an output_dir \n". $! unless ($options{output_dir});
 $options{output_dir} =~ s/\/$//;
+
 system ("mkdir $options{output_dir}") unless -e $options{output_dir};
 die "failed to make output dir $options{output_dir}\n".$! unless -d $options{output_dir};
 
@@ -41,9 +42,13 @@ if (check_for_Rscript() ){
 
 #my ($filename,$dir,$ext) = fileparse($ARGV[0],@SUFFIXES);
 my ($filename,$dir,$ext) = fileparse($options{bam_file},@SUFFIXES);
-$dir = $options{output_dir};
-my $PWD = "/nethome/macmenaminpe/my_code/pipeline_manager_pl";
-my $genomeCoverageBed_bin = $PWD.'/specific_progs/genomeCoverageBed'; # philip macmenamin
+$dir = $options{output_dir};	# philip macmenamin, clobbering this var
+# pretty grim, but I can't find a better way of doing this right now
+my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
+my @a = split /\//,$prog_loc;	  # philip macmenamin
+my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+
+my $genomeCoverageBed_bin = $PWD.'/genomeCoverageBed'; # philip macmenamin
 my $coverage_file = $options{bam_file};
 
 if ($ext =~ m/bam/i){
