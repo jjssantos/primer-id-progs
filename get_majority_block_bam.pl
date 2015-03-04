@@ -2,15 +2,20 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use Cwd;
 
-my $PWD = "/nethome/macmenaminpe/my_code/pipeline_manager_pl";
+# pretty grim, but I can't find a better way of doing this right now
+my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
+my @a = split /\//,$prog_loc;	  # philip macmenamin
+my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+
 my $SORTSAMJAR="/usr/local/bio_apps/picard-tools-1.75/SortSam.jar";
 #my $BWA=$PWD."/specific_progs/bwa";
 my $BWA='/usr/local/bio_apps/bwa/bwa';
-my $INTERSECTBED=$PWD."/specific_progs/intersectBed";
-my $BAMTOBED=$PWD."/specific_progs/bamToBed";
-my $GET_MAJORITY_START_STOP_PL=$PWD."/specific_progs/get_majority_start_stop.pl";
-my $SAMTOOLS=$PWD."/specific_progs/samtools";
+my $INTERSECTBED=$PWD."/intersectBed";
+my $BAMTOBED=$PWD."/bamToBed";
+my $GET_MAJORITY_START_STOP_PL=$PWD."/get_majority_start_stop.pl";
+my $SAMTOOLS=$PWD."/samtools";
 my $JAVA="/usr/local/bio_apps/java/bin/java";
 my $p=8;						# Number of threads to use for BWA. 
 
