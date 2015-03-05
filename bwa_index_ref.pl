@@ -3,8 +3,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 
-my $PWD = "/nethome/macmenaminpe/my_code/pipeline_manager_pl";
-#my $BWA=$PWD."/specific_progs/bwa";
 my $BWA='/usr/local/bio_apps/bwa/bwa';
 
 my $p=8;						# Number of threads to use for BWA. 
