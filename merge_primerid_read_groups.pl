@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+
 use warnings;
 select STDOUT;		 # Turn off buffering for STDOUT for printing from multiple processes at the same time.
 $| = 1;
@@ -22,10 +23,8 @@ use Bio::Tools::Run::Alignment::Clustalw;
 #use Bio::Tools::Run::Alignment::MAFFT;
 use Bio::AlignIO;
 use Bio::SimpleAlign;
-use lib dirname (__FILE__);
 use Statistics::Distributions;
 use Parallel::Loops;
-#use Loops;
 use File::Temp; 
 use Statistics::R;
 use File::Copy;
@@ -56,12 +55,7 @@ use File::Copy;
 
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
-# pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
-my @a = split /\//,$prog_loc;	  # philip macmenamin
-my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
-my $bam2fastx_bin = $PWD.'/bam2fastx'; # philip macmenamin
-my $mafft_bin = $PWD.'/mafft';
+
 my $save;
 my $files;
 my $verbose;
@@ -216,6 +210,8 @@ OPTIONS:
 # Added step to read_fasta to print out fasta files for reads that are above maximum --max_reads value and below minimum --min_reads value.  This is useful for downstream processing to get background frequency rate for unmerged reads.  Added print_out_of_range_fasta sub to do the printing.  
 # 2014-07-17
 # Fixed a bug in the table of ambiguous positions where I was printing the line returns to STDOUT and the rest of the table to STDERR.  
+# 2014-10-14
+# Fixed a bug in read_fasta subroutine where the program was appending belowmin and abovemax reads to existing files. Now it checks if the file exists and deletes it first before writing any reads.
 
 
 unless ($files||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
@@ -238,10 +234,10 @@ unless ($R1_length =~ m/^\d+$/ || $R1_length =~ m/^auto$/i){
 	exit;
 }
 
+
 my $save_dir = $save || Cwd::cwd();
 unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
 print STDERR "save directory: $save_dir\n";
-
 
 my $start_time = time;
 my @files = &aomisc::get_files($files);		#If allowing a directory, specify extension of the files in second argument, e.g., my @files = &get_files($files, 'bed');
@@ -253,24 +249,15 @@ my $iupac = iupac_ambiguities();		# Get a hashref of iupac ambiguity codes.
 
 for (my $i = 0; $i < @files; $i++){
 	my $file = $files[$i];
-
 	my $sample_consensus_seq = "";
 	if ($tiebreaker){
 		$sample_consensus_seq = get_sample_consensus($file, $ref);	# Takes BAM file and optionally a reference, returns sequence with same coordinates as reference.
 	}
 	my $fasta = convert_bam_to_fasta($file);
 	find_gap($fasta);		# Modifies ($gap,$R1_length) global parameters if either is set as 'auto'; otherwise, provides some warnings if user-defined parameters are outside predicted based on auto-detection
-
 	my $read_tally = read_fasta($fasta);
-
 #			print Dumper($read_tally); exit;
-        my $file_renamed = $file; 		# # philip macmenamin - I want this output file to denote it was created by this prog for pipeline assistance 
-        $file_renamed =~ s/get_majority_block_bam\.sh/merge_primerid_read_groups\.pl/; # # philip macmenamin
-# print "--------------------in\t\t", $file, "\nout\t\t", $file_renamed, "\n";
-# exit;
-        my $consensus_sequences = make_consensus($read_tally, $file_renamed, $sample_consensus_seq);	# Need to pass it the file as well, so it can use the name to construct a new name for the consensus bam/fastq/fasta file philip macmenamin
-
-	# my $consensus_sequences = make_consensus($read_tally, $file, $sample_consensus_seq);	# Need to pass it the file as well, so it can use the name to construct a new name for the consensus bam/fastq/fasta file
+	my $consensus_sequences = make_consensus($read_tally, $file, $sample_consensus_seq);	# Need to pass it the file as well, so it can use the name to construct a new name for the consensus bam/fastq/fasta file
 	
 }
 
@@ -373,10 +360,9 @@ sub convert_bam_to_fasta {
 	my ($bam_prefix,$dir,$ext) = fileparse($bam_file,@suffixes);
 	
 	# First check to see whether the input file has been converted to fasta already.  Check based on the extension.  
-	#if ($ext =~ m/bam/i){	# < andrew
-	if (1){			# < philip macmenamin
+	if ($ext =~ m/bam/i){	
 		my $fasta = $save_dir . "/" . $bam_prefix . '.fasta'; 
-		my $cmd = "$bam2fastx_bin -a -o $fasta -A $bam_file 2> /dev/null";
+		my $cmd = "bam2fastx -a -o $fasta -A $bam_file 2> /dev/null";
 		print STDERR "Executing command to make fasta file: $cmd\n";
 		system($cmd);
 		return $fasta;
@@ -547,10 +533,12 @@ sub read_fasta {
 	my $just_right = 0;		# Count for number of primerID groups within limits set.
 	my $total_groups = 0;	# Count for all primerIDs groups. 
 	
-	# Prepare output files for reads below --min_reads and above --max_reads 
+	# Prepare output files for reads below --min_reads and above --max_reads .  Need to delete them if they exist because print_out_of_range_fasta() sub prints in append mode.
 	my ($file_prefix,$dir,$ext) = fileparse($fasta,@suffixes);
 	my $belowmin_file 	= $save_dir . "/" . $file_prefix . ".belowmin.fasta";
 	my $abovemax_file	= $save_dir . "/" . $file_prefix . ".abovemax.fasta";
+	unlink($belowmin_file) if (-e $belowmin_file); 
+	unlink($abovemax_file) if (-e $abovemax_file); 
 	
 	foreach my $primerID (keys %$read_tally){
 		if (scalar(@{$read_tally->{$primerID}->{sequence}}) < $min_reads){
@@ -726,7 +714,7 @@ sub make_consensus {
 	#		my $factory = Bio::Tools::Run::Alignment::MAFFT->new("-clustalout" => 1, "-quiet" => 1, );		# For some reason, it's ignoring these parameters...
 	#		my $aln = $factory->align("$temp_fasta"); 	# $aln is a SimpleAlign object.  http://search.cpan.org/~cjfields/BioPerl-1.6.901/Bio/SimpleAlign.pm.  
 
-			my $cmd = "$mafft_bin --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
+			my $cmd = "mafft --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
 #>Seq12_part
 #TTCGAAAGATTCAAAATATTT CCC AAA GAA AGC TCA TGG CCC GACCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
 #>GGAAAGACGG
