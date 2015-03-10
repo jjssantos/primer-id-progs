@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 
 use warnings;
 $| = 1;
@@ -24,6 +24,13 @@ use Parallel::Loops;
 use Bio::AlignIO;
 use Bio::Tools::Run::Alignment::Clustalw;
 use File::Which;
+
+# pretty grim, but I can't find a better way of doing this right now
+my $prog_loc = Cwd::abs_path($0);        # philip macmenamin
+my @a = split /\//,$prog_loc;    # philip macmenamin
+my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+my $mafft_bin = $PWD.'/mafft'; # philip
+
 
 #use Bio::Perl;
 #use Getopt::Std;
@@ -480,18 +487,18 @@ sub get_unique_seqs {
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	
-	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
-	if ($check_for_fasta_collapser){
+	# my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
+	# if ($check_for_fasta_collapser){
 		# Found fasta_collapser.pl
 		print STDERR "Saving unique sequences to $unique_seqs_fasta\n";
-		my $cmd = "fasta_collapser.pl -i $file -o $unique_seqs_fasta";
+		my $cmd = $PWD."fasta_collapser.pl -i $file -o $unique_seqs_fasta";
 		system($cmd);
 		return $unique_seqs_fasta;
-	}
-	else {
-		print STDERR "Can't find fasta_collapser.pl to make unique sequences.  Will run each sequence in the input file. (I suggest you cancel and install fastx toolkit to make this step faster.)\n";
-		return $file;
-	}
+	# }
+	# else {
+	# 	print STDERR "Can't find fasta_collapser.pl to make unique sequences.  Will run each sequence in the input file. (I suggest you cancel and install fastx toolkit to make this step faster.)\n";
+	# 	return $file;
+	# }
 }	
 #-----------------------------------------------------------------------------
 sub read_input_reads {
@@ -549,7 +556,7 @@ sub read_input_reads {
 	#		my $factory = Bio::Tools::Run::Alignment::MAFFT->new("-clustalout" => 1, "-quiet" => 1, );		# For some reason, it's ignoring these parameters...
 	#		my $aln = $factory->align("$temp_fasta"); 	# $aln is a SimpleAlign object.  http://search.cpan.org/~cjfields/BioPerl-1.6.901/Bio/SimpleAlign.pm.  
 
-			my $cmd = "mafft --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
+			my $cmd = "$mafft_bin --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
 #>Seq12_part
 #TTCGAAAGATTCAAAATATTT CCC AAA GAA AGC TCA TGG CCC GACCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
 #>GGAAAGACGG
