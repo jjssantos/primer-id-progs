@@ -2,13 +2,12 @@
 $| = 1;
 use strict;
 use warnings;
+use aomisc;
 use File::Temp;
 use File::Basename;
-use Getopt::Long;
-use lib dirname (__FILE__);	# # philip macmenamin
-use aomisc;
 
-#my $file = $ARGV[0];
+
+my $file = $ARGV[0];
 
 my $usage = basename($0)." <coverage file or BAM>
 Coverage file is the output of genomeCoverageBed with option -d.
@@ -19,44 +18,24 @@ If input filename is /path/file.bam, output will be /path/file.pdf.
 # Change log
 # 2013-11-04 Modified to plot each chromosome separately
 
-#die "$usage" unless $ARGV[0];
+die "$usage" unless $ARGV[0];
 
-my %options;
-GetOptions(\%options,
-	   'bam_file=s',
-	   'output_dir=s'
-	   );
-
-die "I need a bam file to graph \n". $! unless ($options{bam_file} && (-e $options{bam_file}));
-
-die "I need an output_dir \n". $! unless ($options{output_dir});
-$options{output_dir} =~ s/\/$//;
-
-system ("mkdir $options{output_dir}") unless -e $options{output_dir};
-die "failed to make output dir $options{output_dir}\n".$! unless -d $options{output_dir};
 
 # Check for R
 if (check_for_Rscript() ){
 	die; 
 }
 
-#my ($filename,$dir,$ext) = fileparse($ARGV[0],@SUFFIXES);
-my ($filename,$dir,$ext) = fileparse($options{bam_file},@SUFFIXES);
-$dir = $options{output_dir};	# philip macmenamin, clobbering this var
-# pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
-my @a = split /\//,$prog_loc;	  # philip macmenamin
-my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+my ($filename,$dir,$ext) = fileparse($ARGV[0],@SUFFIXES);		
 
-my $genomeCoverageBed_bin = $PWD.'/genomeCoverageBed'; # philip macmenamin
-my $coverage_file = $options{bam_file};
+my $coverage_file = $ARGV[0];
 
 if ($ext =~ m/bam/i){
 	# Then run genomeCoverageBed first
 	# E.g.,	for i in {1..18}; do b=$(ls Sample*_${i}_*max10.bam); echo $b; genomeCoverageBed -ibam $b -split -d > ${b/.bam/.cov}; done
 	$coverage_file = $dir . "/" . $filename . '.cov'; 
 	print STDERR "Coverage file: $coverage_file\n";
-	my $cmd = "$genomeCoverageBed_bin -ibam $options{bam_file} -split -d > $coverage_file";
+	my $cmd = "genomeCoverageBed -ibam $ARGV[0] -split -d > $coverage_file";
 	system($cmd);
 }
 
