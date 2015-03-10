@@ -111,6 +111,8 @@ concatenate_fastq.pl -o Sample_5.concat.fastq -r Seq12_093009_HA_cds.fa --cpu 14
 # Changed the base quality to 3 '$' instead of 2 '#' for the inserted Ns.  This way, I can use fastq_quality_filter -q 3 -p 100 to filter out any concatenated reads where either R1 or R2 had an N in the original read if I want to.  
 # 2014-01-09
 # Removed the Parallel Loop lines that were commented out.
+# 2015-01-16
+# Changed Processed read counter to every 100K instead of every 10K. 
 
 # To do
 # Make a distribution graph of insert sizes when using --ref. 
@@ -191,7 +193,7 @@ while( $entry = $fastq_iterator->()){
 	$entry2 = $fastq_iterator_2->(); 
 	$count++; 
 	
-	if ($count % 10000 == 0){
+	if ($count % 100000 == 0){
 		print STDERR "Processed $count reads. "; 
 		&elapsed($start_time, 'Elapsed', $verbose);
 	}
@@ -413,12 +415,20 @@ sub get_gaps_with_bwa{
 		my $sum = 0;
 		my $stored = 0;
 		CIGAR: for (my $i=0; $i < @$cigar; $i++){ 
-			if ($sum >= ($read_length - $buffer) && $sum <= ($read_length + $buffer * 2) && $cigar->[$i]->[0] eq 'D'){
-				# position of the deletion in the read with respect to reference is within one buffer upstream and 2 buffer distances downstream of the end of the R1 read
-					#	print "id: $F[0]\tsum: $sum\tmatch: $cigar->[$i]->[1]\n";
-				$id_to_gap_hash->{$id} = $cigar->[$i]->[1]; 
-				$stored++;
-				last CIGAR;
+			if ($sum >= ($read_length - $buffer) && $sum <= ($read_length + $buffer * 2)){
+					# position of the deletion/insertion in the read with respect to reference is within one buffer upstream and 2 buffer distances downstream of the end of the R1 read
+			 	if($cigar->[$i]->[0] eq 'D'){
+						#	print "id: $F[0]\tsum: $sum\tmatch: $cigar->[$i]->[1]\n";
+					$id_to_gap_hash->{$id} = $cigar->[$i]->[1]; # store the size of the gap.  Positive value for gap.  
+					$stored++;
+					last CIGAR;		#?  Is there ever insertion and deletion??
+				elsif($cigar->[$i]->[0] eq 'I'){
+					# somehow store the position to delete the overlap region.  
+					# Negative value for insertion.  
+					$id_to_gap_hash->{$id} = -1 * $cigar->[$i]->[1]; # store the size of the gap.  Negative value for an insertion.   (Does this work???)
+					$stored++;
+					last CIGAR;		#? Unless sometimes insertion and deletion??
+				}
 			}
 			$sum+= $cigar->[$i]->[1];
 #			unless ($cigar->[$i]->[1] =~ m/^\d+$/){
