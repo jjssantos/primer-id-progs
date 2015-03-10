@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+
 use warnings;
 $| = 1;
 
@@ -51,12 +52,6 @@ use File::Which;
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 
-# pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
-my @a = split /\//,$prog_loc;	  # philip macmenamin
-my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
-my $mafft_bin = $PWD.'/mafft'; # philip
-
 my $save;
 my $files;
 my $verbose;
@@ -81,40 +76,55 @@ GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, '
 #-----------------------------------------------------------------------------
 
 my $usage = "
-convert_reads_to_amino_acid.pl takes one or more consensus fasta files and compares to reference
-sequences and annotation to output the amino acid sequence of the read.  All aligned reads
-should have the same starting position.  For now, assumes ONE gene per chromosome and 
-genes must be on the positive strand (e.g., viral genomes).  Reads are translated
-using the mammalian genetic code (including interpretation of wobble bases where the third 
-position of the codon is an unknown base), and a tally is made for each amino acid, plus 
-_ for stop, X for unknown amino acid, and * for deletion in the read compared to reference. 
-(amino acid * results from deletions filled in with base X.).  Note that before analyzing,
-the fasta file is collapsed into unique sequences with fasta_collapser.pl.  (fasta_collapser.pl 
-should be found on the PATH.)
+convert_reads_to_amino_acid.pl takes one or more fasta files (e.g., sequencing reads), 
+compares to a reference coding sequence and outputs frequency tables of nucleotide, 
+codon, and amino acid sequence by position.  A merged table containing frequencies for 
+all three is also produced, as well as phylip files for nucleotide and peptide sequence.  
+All reads must be in the same orientation as the reference.  Reads are translated using 
+the mammalian genetic code, including interpretation of wobble bases where the third 
+position of the codon is an unknown base. In addition to amino acids, frequency for stop, 
+unknown amino acid, and deletion in the read compared to reference are encoded as _, X, 
+and *, respectively. 
 
-OPTIONS:
+Pre-requisites.
+Programs required on PATH:
+fasta_collapser.pl 
+mafft
+clustalw (if using --clustalw)
+
+Non-standard Perl modules:
+Bioperl, including Bio::DB::Sam and Bio::Tools::Run::Alignment::Clustalw
+Array::Utils
+Parallel::Loops
+
+
+Required Arguments:
 --files 	Input file(s), comma-delimited.  One fasta file per sample.  Required.
--r/--ref	Reference fasta file.  Required.  Reads should be aligned to CDS sequence.
---gff		GFF file indicating coding start and stop within the fasta file.
-		Must have \"CDS\" features.  Required.  One gene per chromosome.  Should be
-		sorted by coordinate.  (Used to get the gene names.)
---label		Name(s) for sample, comma-delimited (no spaces) in the order in which 
-		they were input into --files. Default: Sample_1, Sample_2, etc.
+-r/--ref	Reference coding (CDS) sequence fasta file.  Required.  Used to determine 
+		translation frame of reference.
+
+Optional Arguments:
+--label		Name(s) for sample(s), comma-delimited (no spaces) in the order in which 
+		they were input into --files. Default: Sample_1,Sample_2, etc.
 --prefix	Prefix for output files.  Default = Convert_reads
---mapq		Minimum read mapping quality to consider.  Default = 0.
---baseq		Minimum base quality to consider for translation.  Default = 0.
 --save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
 		will be created.
+-p/--cpu	Number of processors to use. Default = 1.
+--clustalw	Use clustalw to run alignments. Default is to use mafft.  *Executables must be 
+		on the PATH.*  Speed is about the same for clustalw and mafft (about 1.3x faster 
+		for clustalw).
 --alignment_length	Length for alignment from the starting position.  Default is the 
 		majority read length.  Reads shorter than this will be removed and reads longer
 		will be truncated.  
 --variant_threshold	Minimum threshold frequency for output variant file.  Default = 0 
 		(i.e., print all variants).  (Note that in calculate_linkage_disequilibrium.pl
 		there is an option to filter for a variant_threshold as well.)
--p/--cpu	Number of processors to use. Default = 1.
---clustalw	Use clustalw to run alignments. Default is to use mafft.  *Executables must be 
-		on the PATH.*  Speed is about the same for clustalw and mafft (about 1.3x faster 
-		for clustalw).
+
+Example:
+convert_reads_to_amino_acid.pl --files 30_S1.contigs.pid.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --label 30_S1 --prefix 30_S1.contigs.pi.btrim.0.majority.cons -p 7
+
+Notes:
+1. Recommended h_vmem (RAM) value per thread is 6G, although it may be fine with less, depending on the size and complexity of your input file. 
 ";
 
 
@@ -209,6 +219,17 @@ OPTIONS:
 # Swapped out fastx_collapser for a custom script I wrote fasta_collapser.pl which allows for ambiguous characters, which sometimes creep into the consensus fasta file from merge_primerid_read_groups.pl (usually when they are in the middle gap).  
 # 2014-07-18
 # Added count_total_from_good_toss_arrays subroutine.  
+# 2015-03-03
+# Removed --gff option (not using it at the moment; using CDS reference sequence to get the frame of reference for translation).  
+# Also removed --baseq and --mapq options because not using them now.
+#--gff		GFF file indicating coding start and stop within the fasta file.
+#		Must have \"CDS\" features.  One gene per chromosome.  Should be
+#		sorted by coordinate.  (Used to get the gene names.)
+#--mapq		Minimum read mapping quality to consider.  Default = 0.
+#--baseq		Minimum base quality to consider for translation.  Default = 0.
+# Edited usage statement.  Removed this:
+# It is recommended that all reads begin with the same starting position.  For now, the script assumes there is one gene per chromosome and genes must be on the positive strand (e.g., viral genomes).  
+# (Amino acid * usually results from deletions filled in with base X.).  
 
 unless ($ref && ($files||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
@@ -225,8 +246,6 @@ $baseq //= 0;	# zero is a valid value		# Was 13
 
 print STDERR "baseq: $baseq\nmapq: $mapq\n"; 	# exit;
 my $save_dir = $save || Cwd::cwd();
-# print $save_dir;
-# exit;
 unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
 # warn "save directory: $save_dir\n";
 
@@ -461,19 +480,18 @@ sub get_unique_seqs {
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	
-#	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
-#	if ($check_for_fasta_collapser){
+	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
+	if ($check_for_fasta_collapser){
 		# Found fasta_collapser.pl
 		print STDERR "Saving unique sequences to $unique_seqs_fasta\n";
-		my $cmd = $PWD."/fasta_collapser.pl -i $file -o $unique_seqs_fasta";
-
+		my $cmd = "fasta_collapser.pl -i $file -o $unique_seqs_fasta";
 		system($cmd);
 		return $unique_seqs_fasta;
-	# }
-	# else {
-	# 	print STDERR "Can't find fasta_collapser.pl to make unique sequences.  Will run each sequence in the input file. (I suggest you cancel and install fastx toolkit to make this step faster.)\n";
-	# 	return $file;
-	# }
+	}
+	else {
+		print STDERR "Can't find fasta_collapser.pl to make unique sequences.  Will run each sequence in the input file. (I suggest you cancel and install fastx toolkit to make this step faster.)\n";
+		return $file;
+	}
 }	
 #-----------------------------------------------------------------------------
 sub read_input_reads {
@@ -531,7 +549,7 @@ sub read_input_reads {
 	#		my $factory = Bio::Tools::Run::Alignment::MAFFT->new("-clustalout" => 1, "-quiet" => 1, );		# For some reason, it's ignoring these parameters...
 	#		my $aln = $factory->align("$temp_fasta"); 	# $aln is a SimpleAlign object.  http://search.cpan.org/~cjfields/BioPerl-1.6.901/Bio/SimpleAlign.pm.  
 
-			my $cmd = "$mafft_bin --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
+			my $cmd = "mafft --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
 #>Seq12_part
 #TTCGAAAGATTCAAAATATTT CCC AAA GAA AGC TCA TGG CCC GACCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
 #>GGAAAGACGG
@@ -733,13 +751,11 @@ sub read_input_reads {
 	# Prepare the output files of cleaned reads and full peptides
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 	
-#	my $newfilename = $save_dir . "/" . $filename . ".cleanreads.txt";
-	my $newfilename = $save_dir . "/" . $prefix . ".cleanreads.txt";
+	my $newfilename = $save_dir . "/" . $filename . ".cleanreads.txt";
 	my $clean_reads_fh = open_to_write("$newfilename");
 	print $clean_reads_fh "#readID|gene|positionForFirstNucleotideBase\tcleanRead\n";
 	
-#	my $fullpeptide = $save_dir . "/" . $filename . ".cleanpeptides.txt";
-	my $fullpeptide = $save_dir . "/" . $prefix . ".cleanpeptides.txt";
+	my $fullpeptide = $save_dir . "/" . $filename . ".cleanpeptides.txt";
 #					print STDERR "Full peptide alignment will be stored in this file: $fullpeptide\n";
 	my $pepfh = open_to_write("$fullpeptide");
 	print $pepfh "#readID|gene|positionForFirstAminoAcid\tcleanPeptide\n";
@@ -812,7 +828,7 @@ sub read_input_reads {
 sub count_total_from_good_toss_arrays {
 	my ($array,$good_or_toss) = @_;
 	# Array is an AoH where a pertinent key in the has is the sequence id, which has format such as  2-520, meaning sequence 2, count = 520.
-	my ($unique_count,$total_count);
+	my ($unique_count,$total_count) = (0,0);
 	foreach my $seq (@$array){
 		$unique_count++;
 		my $id = $seq->{'id'};
