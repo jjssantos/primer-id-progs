@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+
 use warnings;
 $| = 1;
 
@@ -9,8 +10,6 @@ use lib "$FindBin::Bin";
 
 use strict;
 use FileHandle;
-use File::Basename;		# # philip macmenamin
-use lib dirname (__FILE__);	# # philip macmenamin
 use aomisc;
 use Cwd;
 use diagnostics; 
