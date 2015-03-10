@@ -11,7 +11,7 @@ use Carp;
 use Data::Dumper;
 use Cwd;
 use File::Basename;
-my @suffixes = qw(.bed .bed12 .bed6 .txt .fasta .fastq .fq .fa .fas .fna .png .pdf .gtf .gff .gff3 .sam .bam .xls .tab .ucsc .csv .names .qual .diff .gct .bg); 	#for fileparse.  Feel free to add more accepted extensions.		
+my @suffixes = qw(.bed .bed12 .bed6 .txt .fasta .fastq .fq .fa .fas .fna .png .pdf .gtf .gff .gff3 .sam .bam .xls .tab .ucsc .csv .names .qual .diff .gct .bg .bedGraph .g.vcf .vcf); 	#for fileparse.  Feel free to add more accepted extensions.		
 our @SUFFIXES = _get_suffixes(\@suffixes);	#Needs to be "our" instead of "my" in order to export 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(
@@ -97,6 +97,7 @@ our @EXPORT = qw(
 # Modified simple_hash subroutine to use //= for first and second column values, to allow zero to be a valid value.  
 
 # To Do
+# Move subroutines to make venn diagram into a separate module
 
 #-------------------------------------------------------------------------------
 #----------------------------------- FUNCTIONS ---------------------------------
