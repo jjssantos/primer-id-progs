@@ -422,6 +422,7 @@ sub get_gaps_with_bwa{
 					$id_to_gap_hash->{$id} = $cigar->[$i]->[1]; # store the size of the gap.  Positive value for gap.  
 					$stored++;
 					last CIGAR;		#?  Is there ever insertion and deletion??
+				}
 				elsif($cigar->[$i]->[0] eq 'I'){
 					# somehow store the position to delete the overlap region.  
 					# Negative value for insertion.  
