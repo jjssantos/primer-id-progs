@@ -56,10 +56,7 @@ use File::Copy;
 
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
-# pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
-my @a = split /\//,$prog_loc;	  # philip macmenamin
-my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+my $PWD  = pwd_for_hpc();
 my $bam2fastx_bin = $PWD.'/bam2fastx'; # philip macmenamin
 my $mafft_bin = $PWD.'/mafft';
 my $save;
