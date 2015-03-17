@@ -15,6 +15,7 @@ my @suffixes = qw(.bed .bed12 .bed6 .txt .fasta .fastq .fq .fa .fas .fna .png .p
 our @SUFFIXES = _get_suffixes(\@suffixes);	#Needs to be "our" instead of "my" in order to export 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(
+		    pwd_for_hpc
 	round
 	average
 	total
@@ -96,6 +97,12 @@ our @EXPORT = qw(
 # 2013-11-12
 # Modified simple_hash subroutine to use //= for first and second column values, to allow zero to be a valid value.  
 
+# philip
+sub pwd_for_hpc{
+    my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
+    my @a = split /\//,$prog_loc;	  # philip macmenamin
+    return join '/', @a[0..$#a-1]; # philip macmenamin 
+}
 # To Do
 # Move subroutines to make venn diagram into a separate module
 
