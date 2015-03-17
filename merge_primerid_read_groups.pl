@@ -1,5 +1,4 @@
 #!/usr/local/bio_apps/perl-5.16.2/bin/perl
-
 use warnings;
 select STDOUT;		 # Turn off buffering for STDOUT for printing from multiple processes at the same time.
 $| = 1;
@@ -11,7 +10,6 @@ use lib "$FindBin::Bin";
 
 use strict;
 use FileHandle;
-use lib dirname (__FILE__);
 use aomisc;
 use Cwd;
 use diagnostics; 
@@ -24,8 +22,10 @@ use Bio::Tools::Run::Alignment::Clustalw;
 #use Bio::Tools::Run::Alignment::MAFFT;
 use Bio::AlignIO;
 use Bio::SimpleAlign;
+use lib dirname (__FILE__);
 use Statistics::Distributions;
 use Parallel::Loops;
+#use Loops;
 use File::Temp; 
 use Statistics::R;
 use File::Copy;
@@ -57,12 +57,11 @@ use File::Copy;
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 # pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);        # philip macmenamin
-my @a = split /\//,$prog_loc;    # philip macmenamin
+my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
+my @a = split /\//,$prog_loc;	  # philip macmenamin
 my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
 my $bam2fastx_bin = $PWD.'/bam2fastx'; # philip macmenamin
 my $mafft_bin = $PWD.'/mafft';
-
 my $save;
 my $files;
 my $verbose;
@@ -246,6 +245,7 @@ my $save_dir = $save || Cwd::cwd();
 unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
 print STDERR "save directory: $save_dir\n";
 
+
 my $start_time = time;
 my @files = &aomisc::get_files($files);		#If allowing a directory, specify extension of the files in second argument, e.g., my @files = &get_files($files, 'bed');
 my @suffixes = (qw(.bed .bed.gz .bed12 .bed12.gz .txt .txt.gz .BED .BED.gz .BED12 .BED12.gz .fasta .fa .FA .FASTA .FAS .fas), @SUFFIXES);	#for fileparse.  Feel free to add more accepted extensions.  @SUFFIXES comes from aomisc.pm.  
@@ -256,13 +256,16 @@ my $iupac = iupac_ambiguities();		# Get a hashref of iupac ambiguity codes.
 
 for (my $i = 0; $i < @files; $i++){
 	my $file = $files[$i];
+
 	my $sample_consensus_seq = "";
 	if ($tiebreaker){
 		$sample_consensus_seq = get_sample_consensus($file, $ref);	# Takes BAM file and optionally a reference, returns sequence with same coordinates as reference.
 	}
 	my $fasta = convert_bam_to_fasta($file);
 	find_gap($fasta);		# Modifies ($gap,$R1_length) global parameters if either is set as 'auto'; otherwise, provides some warnings if user-defined parameters are outside predicted based on auto-detection
+
 	my $read_tally = read_fasta($fasta);
+
 #			print Dumper($read_tally); exit;
 	my $consensus_sequences = make_consensus($read_tally, $file, $sample_consensus_seq);	# Need to pass it the file as well, so it can use the name to construct a new name for the consensus bam/fastq/fasta file
 	
@@ -302,7 +305,7 @@ sub get_sample_consensus {
 		$bam = $bam_prefix . ".bam";
 		my $temp_sam = $tempdir . "/temp.sam.gz"; 
 #		my $bwa_mem_cmd = "bwa index $ref; bwa mem -t $cpu -M $ref $file | gzip > $temp_sam; java -Xmx3G -jar $SORTSAMJAR I=$tempdir/temp.sam.gz O=$bam CREATE_INDEX=true SO=coordinate";
-		my $bwa_mem_cmd = $PWD."/bwa index $ref; echo; bwa mem -t $cpu -M $ref $file | samtools view -uS -| samtools sort - $bam_prefix && samtools index $bam";
+		my $bwa_mem_cmd = "bwa index $ref; echo; bwa mem -t $cpu -M $ref $file | samtools view -uS -| samtools sort - $bam_prefix && samtools index $bam";
 		print STDERR "Running command:\n$bwa_mem_cmd\n";
 		system($bwa_mem_cmd);	 # Run alignment
 #		print "Screen Output:$output\n";
@@ -367,7 +370,8 @@ sub convert_bam_to_fasta {
 	my ($bam_prefix,$dir,$ext) = fileparse($bam_file,@suffixes);
 	
 	# First check to see whether the input file has been converted to fasta already.  Check based on the extension.  
-	if ($ext =~ m/bam/i){	
+	#if ($ext =~ m/bam/i){	# < andrew
+	if (1){			# < philip macmenamin
 		my $fasta = $save_dir . "/" . $bam_prefix . '.fasta'; 
 		my $cmd = "$bam2fastx_bin -a -o $fasta -A $bam_file 2> /dev/null";
 		print STDERR "Executing command to make fasta file: $cmd\n";
@@ -540,7 +544,7 @@ sub read_fasta {
 	my $just_right = 0;		# Count for number of primerID groups within limits set.
 	my $total_groups = 0;	# Count for all primerIDs groups. 
 	
-	# Prepare output files for reads below --min_reads and above --max_reads .  Need to delete them if they exist because print_out_of_range_fasta() sub prints in append mode.
+	# Prepare output files for reads below --min_reads and above --max_reads 
 	my ($file_prefix,$dir,$ext) = fileparse($fasta,@suffixes);
 	my $belowmin_file 	= $save_dir . "/" . $file_prefix . ".belowmin.fasta";
 	my $abovemax_file	= $save_dir . "/" . $file_prefix . ".abovemax.fasta";

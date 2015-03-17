@@ -1,5 +1,4 @@
 #!/usr/local/bio_apps/perl-5.16.2/bin/perl
-
 use warnings;
 $| = 1;
 
@@ -24,13 +23,6 @@ use Parallel::Loops;
 use Bio::AlignIO;
 use Bio::Tools::Run::Alignment::Clustalw;
 use File::Which;
-
-# pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);        # philip macmenamin
-my @a = split /\//,$prog_loc;    # philip macmenamin
-my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
-my $mafft_bin = $PWD.'/mafft'; # philip
-
 
 #use Bio::Perl;
 #use Getopt::Std;
@@ -58,6 +50,12 @@ my $mafft_bin = $PWD.'/mafft'; # philip
 
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
+
+# pretty grim, but I can't find a better way of doing this right now
+my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
+my @a = split /\//,$prog_loc;	  # philip macmenamin
+my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+my $mafft_bin = $PWD.'/mafft'; # philip
 
 my $save;
 my $files;
@@ -114,6 +112,8 @@ Optional Arguments:
 --label		Name(s) for sample(s), comma-delimited (no spaces) in the order in which 
 		they were input into --files. Default: Sample_1,Sample_2, etc.
 --prefix	Prefix for output files.  Default = Convert_reads
+--mapq		Minimum read mapping quality to consider.  Default = 0.
+--baseq		Minimum base quality to consider for translation.  Default = 0.
 --save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
 		will be created.
 -p/--cpu	Number of processors to use. Default = 1.
@@ -253,6 +253,8 @@ $baseq //= 0;	# zero is a valid value		# Was 13
 
 print STDERR "baseq: $baseq\nmapq: $mapq\n"; 	# exit;
 my $save_dir = $save || Cwd::cwd();
+# print $save_dir;
+# exit;
 unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
 # warn "save directory: $save_dir\n";
 
@@ -487,11 +489,12 @@ sub get_unique_seqs {
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	
-	# my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
-	# if ($check_for_fasta_collapser){
+#	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
+#	if ($check_for_fasta_collapser){
 		# Found fasta_collapser.pl
 		print STDERR "Saving unique sequences to $unique_seqs_fasta\n";
-		my $cmd = $PWD."fasta_collapser.pl -i $file -o $unique_seqs_fasta";
+		my $cmd = $PWD."/fasta_collapser.pl -i $file -o $unique_seqs_fasta";
+
 		system($cmd);
 		return $unique_seqs_fasta;
 	# }
@@ -835,7 +838,7 @@ sub read_input_reads {
 sub count_total_from_good_toss_arrays {
 	my ($array,$good_or_toss) = @_;
 	# Array is an AoH where a pertinent key in the has is the sequence id, which has format such as  2-520, meaning sequence 2, count = 520.
-	my ($unique_count,$total_count) = (0,0);
+	my ($unique_count,$total_count);
 	foreach my $seq (@$array){
 		$unique_count++;
 		my $id = $seq->{'id'};
