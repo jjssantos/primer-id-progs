@@ -4,10 +4,7 @@ use warnings;
 use Getopt::Long;
 use Cwd;
 
-# pretty grim, but I can't find a better way of doing this right now
-my $prog_loc = Cwd::abs_path($0);	  # philip macmenamin
-my @a = split /\//,$prog_loc;	  # philip macmenamin
-my $PWD = join '/', @a[0..$#a-1]; # philip macmenamin
+my $PWD  = pwd_for_hpc();
 
 my $SORTSAMJAR="/usr/local/bio_apps/picard-tools-1.75/SortSam.jar";
 #my $BWA=$PWD."/specific_progs/bwa";
