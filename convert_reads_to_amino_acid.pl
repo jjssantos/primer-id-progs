@@ -51,7 +51,6 @@ use File::Which;
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 
-# pretty grim, but I can't find a better way of doing this right now
 my $PWD = pwd_for_hpc();
 my $mafft_bin = $PWD.'/mafft'; # philip
 
