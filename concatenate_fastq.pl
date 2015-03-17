@@ -222,7 +222,7 @@ while( $entry = $fastq_iterator->()){
 			my $id = $ids[0];		# Need just the first part of the id, because that is how the hash keys were saved, e.g., @MISEQ:50:000000000-A4142:1:1101:17205:1539 . Also remove the @ 
 			$id =~ s/^@//;
 			$number = $id_to_gap_hash->{$id}; 
-						# print "id: $id number: $number\n"; exit;
+						 # print "id: $id number: $number\n"; exit;
 		}
 	}
 
@@ -309,8 +309,8 @@ sub get_custom_number_Ns_clustalw {
  sub check_for_bwa {
 	# Check for bwa mem on the PATH.
 	# Returns 0 if successful, 1 if an error occurs.
-	
-	my $output=`bwa mem 2>&1`;  # Captures stdout and stderr.  
+     my $pwd = pwd_for_hpc();
+	my $output=`$pwd/bwa mem 2>&1`;  # Captures stdout and stderr.  
 	$output = trim($output);	
 	
 	# Test on command-line: perl -e'use aomisc; my $output=`bwa mem 2>&1`; $output = trim($output); print "-$output-\n"'
@@ -335,7 +335,7 @@ sub get_custom_number_Ns_clustalw {
 #-----------------------------------------------------------------------------
 sub get_gaps_with_bwa{
 	my ($ref, $fastq_file1, $fastq_file2, $buffer) = @_;
-	
+#	print join "\t", ($ref, $fastq_file1, $fastq_file2, $buffer),"\n"; exit;
 	my $id_to_gap_hash; 	# Hash to store 
 	
 	
@@ -344,9 +344,11 @@ sub get_gaps_with_bwa{
 	
 	# Create temporary fastq file
 	print STDERR "Making temporary fastq file by concatenating with no gap.";  &elapsed($start_time, ' Elapsed', $verbose);
-	my $cwd = Cwd::cwd();
-	my $tempdir = File::Temp->newdir(  "$cwd/concat_fastq_tempXXXXXXX" );
-	my $temp_fastq = $tempdir."/temp.fastq";
+#	my $cwd = Cwd::cwd();
+
+#	my $tempdir = File::Temp->newdir(  "$cwd/concat_fastq_tempXXXXXXX" );
+	my $tempdir = $save;
+	my $temp_fastq = $save."temp.fastq";
 	my $fh = open_to_write($temp_fastq, 0, 0, 1);
 
 	open (my $first , '<' , $fastq_file1) || die $!;
@@ -383,7 +385,8 @@ sub get_gaps_with_bwa{
 	my $refbase = basename($ref);
 	my $temp_sam = $tempdir ."/temp.sam";
 #	my $temp_sam = "temp.sam";
-	my $cmd = "cp $ref $tempdir; bwa index $tempdir/$refbase 2> $tempdir/bwa_index_out.txt && bwa mem -t $cpu -M $tempdir/$refbase $temp_fastq 2> $tempdir/bwa_mem_out.txt | samtools view -S -F 256 - 2> $tempdir/samtools_view_out.txt > $temp_sam";
+	my $pwd = pwd_for_hpc();
+	my $cmd = "cp $ref $tempdir; $pwd/bwa index $tempdir/$refbase 2> $tempdir/bwa_index_out.txt && $pwd/bwa mem -t $cpu -M $tempdir/$refbase $temp_fastq 2> $tempdir/bwa_mem_out.txt | samtools view -S -F 256 - 2> $tempdir/samtools_view_out.txt > $temp_sam";
 	system($cmd);  # This will copy the reference sequence to the temporary directory, index it, align the reads, filter to get only primary alignments and output a SAM file.
 					#	system("cat $tempdir/bwa_mem_out.txt");
 					#	system("wc $temp_sam");
