@@ -2,7 +2,9 @@
 use strict;
 use warnings;
 use Getopt::Long;
-use Cwd;
+use File::Basename;
+use lib dirname (__FILE__);
+use aomisc;
 
 my $PWD  = pwd_for_hpc();
 
