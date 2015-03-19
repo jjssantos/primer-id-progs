@@ -113,6 +113,10 @@ concatenate_fastq.pl -o Sample_5.concat.fastq -r Seq12_093009_HA_cds.fa --cpu 14
 # Removed the Parallel Loop lines that were commented out.
 # 2015-01-16
 # Changed Processed read counter to every 100K instead of every 10K. 
+# 2015-03-16
+# Added table of gap lengths
+# 2015-03-18
+# Added basename to temporary output files to avoid collisions in case no output directory is specified
 
 # To do
 # Make a distribution graph of insert sizes when using --ref. 
@@ -121,6 +125,8 @@ concatenate_fastq.pl -o Sample_5.concat.fastq -r Seq12_093009_HA_cds.fa --cpu 14
 # Put the Parallel Loop for clustalw in a separate subroutine.  Right now it's not running in parallel. 
 # Maybe make an option to remove any sequences that don't align to the reference...
 # Add a script before this one the check whether reads of a pair overlap or not; if so, send to pandaseq, if not, run in concatenate_fastq.pl
+# Check first whether bwa index exists before running bwa index
+# Maybe change default output directory to something other than Cwd?
 
 unless ($ARGV[1]){	print STDERR "$usage\n";	exit;	}
 my $start_time = time;
@@ -342,13 +348,17 @@ sub get_gaps_with_bwa{
 	#### First, go through the input fastq to make fasta files with the sequences concatenated with no Ns.   ###
 		# This section borrows a lot of code from above.  It might be nice to put it all in a subroutine at some point to make everything more concise.
 	
+	# Get file base name to add to temp files.
+	my ($base,$path,$ext) = fileparse($fastq_file1,@SUFFIXES);
+	$base =~ s/_R?1//g;
+
 	# Create temporary fastq file
 	print STDERR "Making temporary fastq file by concatenating with no gap.";  &elapsed($start_time, ' Elapsed', $verbose);
 #	my $cwd = Cwd::cwd();
 
 #	my $tempdir = File::Temp->newdir(  "$cwd/concat_fastq_tempXXXXXXX" );
 	my $tempdir = $save;
-	my $temp_fastq = $save."temp.fastq";
+	my $temp_fastq = "$tempdir/$base" . ".temp.fastq";
 	my $fh = open_to_write($temp_fastq, 0, 0, 1);
 
 	open (my $first , '<' , $fastq_file1) || die $!;
@@ -383,10 +393,18 @@ sub get_gaps_with_bwa{
 	####  Now align to the reference sequence with bwa mem  ###
 	print STDERR "Aligning temporary fastq file to reference with bwa mem.";  &elapsed($start_time, ' Elapsed', $verbose);
 	my $refbase = basename($ref);
-	my $temp_sam = $tempdir ."/temp.sam";
+	my $temp_sam = "$tempdir/$base" . ".temp.sam";
 #	my $temp_sam = "temp.sam";
 	my $pwd = pwd_for_hpc();
-	my $cmd = "cp $ref $tempdir; $pwd/bwa index $tempdir/$refbase 2> $tempdir/bwa_index_out.txt && $pwd/bwa mem -t $cpu -M $tempdir/$refbase $temp_fastq 2> $tempdir/bwa_mem_out.txt | samtools view -S -F 256 - 2> $tempdir/samtools_view_out.txt > $temp_sam";
+	my $bwa_index_out 	= "$tempdir/$base" . ".bwa_index_out.txt";
+	my $bwa_mem_out 	= "$tempdir/$base" . ".bwa_mem_out.txt";
+	my $samtools_view_out 	= "$tempdir/$base" . ".samtools_view_out";
+
+	# [Need to check first whether the bam index exists before running bwa index...]	
+	# [Also check whether $ref exists in $tempdir before copying...]
+
+	my $cmd = "cp $ref $tempdir/; $pwd/bwa index $tempdir/$refbase 2> $bwa_index_out && $pwd/bwa mem -t $cpu -M $tempdir/$refbase $temp_fastq 2> $bwa_mem_out | samtools view -S -F 256 - 2> $samtools_view_out > $temp_sam";
+	print STDERR "Executing: $cmd\n";
 	system($cmd);  # This will copy the reference sequence to the temporary directory, index it, align the reads, filter to get only primary alignments and output a SAM file.
 					#	system("cat $tempdir/bwa_mem_out.txt");
 					#	system("wc $temp_sam");
