@@ -396,6 +396,7 @@ sub get_gaps_with_bwa{
 	my $samfh = open_to_read($temp_sam);
 	my $unmapped = 0;
 	my $mapped = 0; 
+	my $gap_sizes; 	#Hashref of gap size counts
 	while(<$samfh>){ 
 		chomp; 
 		my @F = split(/\t/); 
@@ -423,6 +424,7 @@ sub get_gaps_with_bwa{
 			 	if($cigar->[$i]->[0] eq 'D'){
 						#	print "id: $F[0]\tsum: $sum\tmatch: $cigar->[$i]->[1]\n";
 					$id_to_gap_hash->{$id} = $cigar->[$i]->[1]; # store the size of the gap.  Positive value for gap.  
+					$gap_sizes->{$cigar->[$i]->[1]}++;
 					$stored++;
 					last CIGAR;		#?  Is there ever insertion and deletion??
 				}
@@ -442,6 +444,7 @@ sub get_gaps_with_bwa{
 		}
 		unless ($stored){
 			$id_to_gap_hash->{$id} = 0;		# If there was no D cigar element in the expected location, then there is no gap in the read, so assign a zero gap.  (actually, there might actually be overlap between these reads... I've found that sometimes there is a gap in the reference with these reads)
+			$gap_sizes->{0}++;
 		}
 	}
 	close($samfh);
@@ -449,6 +452,12 @@ sub get_gaps_with_bwa{
 	print STDERR "$unmapped\treads not mapped to the reference sequence.\n" if ($unmapped);
 	&elapsed($start_time, ' Elapsed', $verbose);
 	
+	# Now print out counts for gap sizes.  
+	print STDERR "Gap_size\tCount\n";
+	for my $gap (sort {$gap_sizes->{$b} <=> $gap_sizes->{$a}} keys %$gap_sizes){
+		print STDERR "$gap\t$gap_sizes->{$gap}\n";
+	}
+
 	return $id_to_gap_hash;
 }
 #-----------------------------------------------------------------------------
