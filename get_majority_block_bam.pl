@@ -58,7 +58,7 @@ system "$JAVA -Xmx3G -jar $SORTSAMJAR I=$tmp_sam O=$tmp_bam CREATE_INDEX=true SO
 
 # Get the majority start stop bed file (single bed region)
 my $tmp_bed=$fastq.'.temp_majority.bed';
-system "$BAMTOBED -i $tmp_bam | $GET_MAJORITY_START_STOP_PL > $tmp_bed";
+system "$BAMTOBED -cigar -i $tmp_bam | awk '\$NF !~ /H|S/{print}' | $GET_MAJORITY_START_STOP_PL > $tmp_bed";
 
 # Intersect bam file with majority bed region (-f 1 -r so that all read alignments start and end at the majority positions)
 my $finalbam= $fastq.'.majority.bam';
