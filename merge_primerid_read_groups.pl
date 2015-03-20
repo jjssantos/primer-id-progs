@@ -397,6 +397,8 @@ sub find_gap {
 	my %gap_positions;	# Save the gap positions
 	my $total = 0; 		# Total number of reads processed so far.
 
+	my $min_auto_gap_size = 3;
+
 	my $in  = Bio::SeqIO->new(-file => "$fasta" ,		
                            -format => 'Fasta');			# http://search.cpan.org/~cjfields/BioPerl-1.6.922/Bio/SeqIO.pm
 	FASTA: while ( my $seqobj = $in->next_seq() ) {
@@ -410,7 +412,7 @@ sub find_gap {
 		if ($apparent_long_gap_count < $number_to_check){		# Count all reads, or until 1000 reads are found with a gap.  Could do more if desired.  
 			if ($seq =~ m/(N+)/i){
 				my $length = length($1); 
-				if ($length >= 5){		# Long gap set arbitrarily as 5xN.  Could be parameterized...
+				if ($length >= $min_auto_gap_size){		# Long gap set arbitrarily as 3xN.  Could be parameterized... $min_auto_gap_size
 					$apparent_long_gap_count++;
 					$gap_sizes{$length}++;
 					my $pos = $-[0];	# Index.  (In 1-based, this would be just before the first N)
@@ -431,7 +433,7 @@ sub find_gap {
 	my $common_size = find_key_with_biggest_value(\%gap_sizes);
 	my $common_position = find_key_with_biggest_value(\%gap_positions);
 	if ($fraction > 0.2){		# Arbitrarily set to 20%.  It will probably be close to 99% in reality.  
-		printf STDERR "Many reads were found with a stretch of Ns >= 5 ($total checked in total, found $apparent_long_gap_count).\nFraction of reads: %.3f\nMost common position: %2d (%.3f of reads with gap)\nMost common size: %2d (%.3f of reads with gap)\n", $fraction, $common_position, $gap_positions{$common_position}/$apparent_long_gap_count, $common_size, $gap_sizes{$common_size}/$apparent_long_gap_count; 		
+		printf STDERR "Many reads were found with a stretch of Ns >= $min_auto_gap_size ($total checked in total, found $apparent_long_gap_count).\nFraction of reads: %.3f\nMost common position: %2d (%.3f of reads with gap)\nMost common size: %2d (%.3f of reads with gap)\n", $fraction, $common_position, $gap_positions{$common_position}/$apparent_long_gap_count, $common_size, $gap_sizes{$common_size}/$apparent_long_gap_count; 		
 		my @gap_size_range 	= range([keys %gap_sizes]);
 		my @gap_pos_range 	= range([keys %gap_positions]);
 #									print join " ", @gap_size_range, "\n";
@@ -483,12 +485,12 @@ sub find_gap {
 		# If the user set some parameters for --gap and --R1_length, then we can tell them that it's not likely that there is a gap actually.  
 		# Or if 'auto' was set for either one, we can just set them both to 0.  Don't worry about checking to see if they set a parameter for one but not the other; if either is set to zero, then it's as if both are set to zero.
 		if ($R1_length =~ m/auto/i || $gap =~  m/auto/i){		# The user set one or no parameters.
-			print STDERR  "No significant gaps >= 5bp were detected in the reads.  $total reads were processed and only $apparent_long_gap_count reads had a gap.\n";
+			print STDERR  "No significant gaps >= $min_auto_gap_size bp were detected in the reads.  $total reads were processed and only $apparent_long_gap_count reads had a gap.\n";
 			($gap,$R1_length) = (0,0);
 		}
 		else{	# The user set both parameters, but we suggest they should reconsider
-			if ($gap >= 5){		# See if the user expected gaps >= 5bp long
-				 print STDERR  "No significant gaps >= 5bp were detected in the reads.  $total reads were processed and only $apparent_long_gap_count reads had a gap.\n";
+			if ($gap >= $min_auto_gap_size){		# See if the user expected gaps >=  $min_auto_gap_size bp long
+				 print STDERR  "No significant gaps >=  $min_auto_gap_size bp were detected in the reads.  $total reads were processed and only $apparent_long_gap_count reads had a gap.\n";
 			}
 		}
 	}
