@@ -228,7 +228,7 @@ while( $entry = $fastq_iterator->()){
 			my $id = $ids[0];		# Need just the first part of the id, because that is how the hash keys were saved, e.g., @MISEQ:50:000000000-A4142:1:1101:17205:1539 . Also remove the @ 
 			$id =~ s/^@//;
 			$number = $id_to_gap_hash->{$id}; 
-						 print "id: $id number: $number\n\n-->$id_to_gap_hash->{$id}\n"; exit;
+						# print "id: $id number: $number\n\n-->$id_to_gap_hash->{$id}\n"; exit;
 		}
 	}
 
@@ -403,7 +403,7 @@ sub get_gaps_with_bwa{
 	# [Need to check first whether the bam index exists before running bwa index...]	
 	# [Also check whether $ref exists in $tempdir before copying...]
 
-	my $cmd = "cp $ref $tempdir/; $pwd/bwa index $tempdir/$refbase 2> $bwa_index_out && $pwd/bwa mem -t $cpu -M $tempdir/$refbase $temp_fastq 2> $bwa_mem_out | samtools view -S -F 256 - 2> $samtools_view_out > $temp_sam";
+	my $cmd = "cp $ref $tempdir/; $pwd/bwa index $tempdir/$refbase 2> $bwa_index_out && $pwd/bwa mem -t $cpu -M $tempdir/$refbase $temp_fastq 2> $bwa_mem_out | $pwd/samtools view -S -F 256 - 2> $samtools_view_out > $temp_sam";
 	print STDERR "Executing: $cmd\n";
 	system($cmd);  # This will copy the reference sequence to the temporary directory, index it, align the reads, filter to get only primary alignments and output a SAM file.
 					#	system("cat $tempdir/bwa_mem_out.txt");
