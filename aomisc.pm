@@ -329,7 +329,7 @@ sub open_to_write {
 		return $writefh;
 	}
 	else {
-		carp "Can\'t open file '$path_to_open': " . $writefh->error . "\n";		#Not sure if $writefh->error is proper call of method.  This is what Tim Parnell had done.
+		carp "Can\'t open file '$path_to_open' in mode $mode: " . $writefh->error . "\n";		#Not sure if $writefh->error is proper call of method.  This is what Tim Parnell had done.
 		return;
 	}
 
