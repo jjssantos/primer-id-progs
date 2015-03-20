@@ -484,14 +484,14 @@ sub get_unique_seqs {
 	# The id has seq number - count ; it's sorted by most common to least common sequence
 
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
-	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
+#	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
+	my $unique_seqs_fasta = $save . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	
 #	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
 #	if ($check_for_fasta_collapser){
 		# Found fasta_collapser.pl
 		print STDERR "Saving unique sequences to $unique_seqs_fasta\n";
 		my $cmd = $PWD."/fasta_collapser.pl -i $file -o $unique_seqs_fasta";
-
 		system($cmd);
 		return $unique_seqs_fasta;
 	# }

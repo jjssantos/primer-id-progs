@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 
 use warnings;
 # select STDOUT;		# When printing to STDOUT from multiple threads/forks/processes at a time, you need to make STDOUT "hot" instead of the default buffered.  When buffered, the output can be garbled and intermingled, especially when redirecting STDOUT to a file.  See http://www.perlmonks.org/?node_id=619092 and http://perl.plover.com/FAQs/Buffering.html .   # This by itself slows things down by about 2-fold
@@ -228,7 +228,7 @@ while( $entry = $fastq_iterator->()){
 			my $id = $ids[0];		# Need just the first part of the id, because that is how the hash keys were saved, e.g., @MISEQ:50:000000000-A4142:1:1101:17205:1539 . Also remove the @ 
 			$id =~ s/^@//;
 			$number = $id_to_gap_hash->{$id}; 
-						 # print "id: $id number: $number\n"; exit;
+						 print "id: $id number: $number\n\n-->$id_to_gap_hash->{$id}\n"; exit;
 		}
 	}
 
