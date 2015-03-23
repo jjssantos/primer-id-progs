@@ -485,7 +485,7 @@ sub get_unique_seqs {
 
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 #	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
-	my $unique_seqs_fasta = $save . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
+	my $unique_seqs_fasta = $save_dir . "/$filename" . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	
 #	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
 #	if ($check_for_fasta_collapser){
