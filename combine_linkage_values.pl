@@ -74,28 +74,28 @@ $exe takes variants linkage file from calculate_linkage_disequilibrium.pl and pl
 Requires R on the path and requires the 'network' library to be installed in R.
 
 Example input variants file:
-#type	gene	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
-nuc	Seq12_093009_HA_cds	437	A	C	0.04494	713	G	A	0.00924	25448	255	1255	0	8.17785e-06	0	1.172159e-04
-nuc	Seq12_093009_HA_cds	437	A	C	0.04494	471	A	C	0.02352	25045	656	1255	0	2.831032e-14	0	1.217344e-12
-nuc	Seq12_093009_HA_cds	437	A	G	0.03477	713	G	A	0.00924	25448	255	970	0	0.0001394018	0	1.498569e-03
-nuc	Seq12_093009_HA_cds	437	A	G	0.03477	471	A	C	0.02352	25045	656	970	0	4.395709e-11	0	9.450774e-10
-nuc	Seq12_093009_HA_cds	471	A	C	0.02352	713	G	A	0.00924	27015	255	656	0	0.005284684	0	3.246306e-02
-codon	Seq12_093009_HA_cds	146	AAC	AGC	0.03470	157	AAA	AAC	0.02349	24993	655	969	0	4.36592e-11	0	8.731840e-10
-codon	Seq12_093009_HA_cds	146	AAC	AGC	0.03470	238	GGT	GAT	0.00913	25429	255	969	0	0.00013933	0	1.393300e-03
-codon	Seq12_093009_HA_cds	146	AAC	AGC	0.03470	157	AAA	GAA	0.00122	24993	32	969	0	0.6324233	0	1.000000e+00
-codon	Seq12_093009_HA_cds	146	AAC	ACC	0.04490	238	GGT	GAT	0.00913	25429	255	1254	0	8.177191e-06	0	1.090292e-04
-codon	Seq12_093009_HA_cds	146	AAC	ACC	0.04490	157	AAA	GAA	0.00122	24993	32	1252	2	0.6767571	1.24764	1.000000e+00
-codon	Seq12_093009_HA_cds	146	AAC	ACC	0.04490	157	AAA	AAC	0.02349	24993	655	1252	0	2.832116e-14	0	1.132846e-12
-codon	Seq12_093009_HA_cds	157	AAA	AAC	0.02349	238	GGT	GAT	0.00913	26970	255	655	0	0.005285926	0	3.020529e-02
-codon	Seq12_093009_HA_cds	157	AAA	GAA	0.00122	238	GGT	GAT	0.00913	26970	255	34	0	1	0	1.000000e+00
-aa	Seq12_093009_HA_cds	146	N	S	0.03470	157	K	N	0.02352	24997	656	969	0	4.428669e-11	0	7.307304e-10
-aa	Seq12_093009_HA_cds	146	N	S	0.03470	157	K	E	0.00122	24997	32	969	0	0.632412	0	1.000000e+00
-aa	Seq12_093009_HA_cds	146	N	S	0.03470	238	G	D	0.00913	25433	255	969	0	0.0001392977	0	1.149206e-03
-aa	Seq12_093009_HA_cds	146	N	T	0.04494	157	K	E	0.00122	24997	32	1253	2	0.6768856	1.246844	1.000000e+00
-aa	Seq12_093009_HA_cds	146	N	T	0.04494	157	K	N	0.02352	24997	656	1253	0	2.82788e-14	0	9.332004e-13
-aa	Seq12_093009_HA_cds	146	N	T	0.04494	238	G	D	0.00913	25433	255	1255	0	8.178896e-06	0	8.996786e-05
-aa	Seq12_093009_HA_cds	157	K	N	0.02352	238	G	D	0.00913	26971	255	656	0	0.005305044	0	1.945183e-02
-aa	Seq12_093009_HA_cds	157	K	E	0.00122	238	G	D	0.00913	26971	255	34	0	1	0	1.000000e+00
+#group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
+Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:C:713:G:A	437	A	C	0.04494	713	G	A	0.00924	25448	255	1255	0	8.18E-06	0	1.17E-04
+Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:C:471:A:C	437	A	C	0.04494	471	A	C	0.02352	25045	656	1255	0	2.83E-14	0	1.22E-12
+Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:G:713:G:A	437	A	G	0.03477	713	G	A	0.00924	25448	255	970	0	0.000139402	0	1.50E-03
+Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:G:471:A:C	437	A	G	0.03477	471	A	C	0.02352	25045	656	970	0	4.40E-11	0	9.45E-10
+Group1	Sample1	nuc	Seq12_093009_HA_cds	471:A:C:713:G:A	471	A	C	0.02352	713	G	A	0.00924	27015	255	656	0	0.005284684	0	3.25E-02
+Group1	Sample1	codon	Seq12_093009_HA_cds	146:AAC:AGC:157:AAA:AAC	146	AAC	AGC	0.0347	157	AAA	AAC	0.02349	24993	655	969	0	4.37E-11	0	8.73E-10
+Group1	Sample1	codon	Seq12_093009_HA_cds	146:AAC:AGC:238:GGT:GAT	146	AAC	AGC	0.0347	238	GGT	GAT	0.00913	25429	255	969	0	0.00013933	0	1.39E-03
+Group1	Sample1	codon	Seq12_093009_HA_cds	146:AAC:AGC:157:AAA:GAA	146	AAC	AGC	0.0347	157	AAA	GAA	0.00122	24993	32	969	0	0.6324233	0	1.00E+00
+Group1	Sample1	codon	Seq12_093009_HA_cds	146:AAC:ACC:238:GGT:GAT	146	AAC	ACC	0.0449	238	GGT	GAT	0.00913	25429	255	1254	0	8.18E-06	0	1.09E-04
+Group1	Sample1	codon	Seq12_093009_HA_cds	146:AAC:ACC:157:AAA:GAA	146	AAC	ACC	0.0449	157	AAA	GAA	0.00122	24993	32	1252	2	0.6767571	1.24764	1.00E+00
+Group1	Sample1	codon	Seq12_093009_HA_cds	146:AAC:ACC:157:AAA:AAC	146	AAC	ACC	0.0449	157	AAA	AAC	0.02349	24993	655	1252	0	2.83E-14	0	1.13E-12
+Group1	Sample1	codon	Seq12_093009_HA_cds	157:AAA:AAC:238:GGT:GAT	157	AAA	AAC	0.02349	238	GGT	GAT	0.00913	26970	255	655	0	0.005285926	0	3.02E-02
+Group1	Sample1	codon	Seq12_093009_HA_cds	157:AAA:GAA:238:GGT:GAT	157	AAA	GAA	0.00122	238	GGT	GAT	0.00913	26970	255	34	0	1	0	1.00E+00
+Group1	Sample1	aa	Seq12_093009_HA_cds	146:N:S:157:K:N	146	N	S	0.0347	157	K	N	0.02352	24997	656	969	0	4.43E-11	0	7.31E-10
+Group1	Sample1	aa	Seq12_093009_HA_cds	146:N:S:157:K:E	146	N	S	0.0347	157	K	E	0.00122	24997	32	969	0	0.632412	0	1.00E+00
+Group1	Sample1	aa	Seq12_093009_HA_cds	146:N:S:238:G:D	146	N	S	0.0347	238	G	D	0.00913	25433	255	969	0	0.000139298	0	1.15E-03
+Group1	Sample1	aa	Seq12_093009_HA_cds	146:N:T:157:K:E	146	N	T	0.04494	157	K	E	0.00122	24997	32	1253	2	0.6768856	1.246844	1.00E+00
+Group1	Sample1	aa	Seq12_093009_HA_cds	146:N:T:157:K:N	146	N	T	0.04494	157	K	N	0.02352	24997	656	1253	0	2.83E-14	0	9.33E-13
+Group1	Sample1	aa	Seq12_093009_HA_cds	146:N:T:238:G:D	146	N	T	0.04494	238	G	D	0.00913	25433	255	1255	0	8.18E-06	0	9.00E-05
+Group1	Sample1	aa	Seq12_093009_HA_cds	157:K:N:238:G:D	157	K	N	0.02352	238	G	D	0.00913	26971	255	656	0	0.005305044	0	1.95E-02
+Group1	Sample1	aa	Seq12_093009_HA_cds	157:K:E:238:G:D	157	K	E	0.00122	238	G	D	0.00913	26971	255	34	0	1	0	1.00E+00
 
 OPTIONS:
 	-F/--FDR	FDR threshold for inclusion of variants in the analysis.  Default = 0.05.
@@ -119,6 +119,7 @@ OPTIONS:
 # Maybe add filter for only nonsyn codons?
 # Work on optimizing the circle sizes and edge thickness...  see /Users/oleraj/Dropbox/NIAID_Data/WInce/NIH_Research_Festival_Poster/Some_analysis_for_figures/linkage for examples of where it is needed!
 # Clean up a little (subroutine names, etc.)
+# Merge the input files and output a merged output file!
 
 # Change log
 # 2014-04-17
@@ -131,6 +132,8 @@ OPTIONS:
 # Add filter for aa, nuc, codon (default to do all, but can select only aa, or perhaps nonsyn codons or nuc?)
 # Added R graphs
 # Added File::Spec->rel2abs for output directory
+# 2015-03-23
+# Modified expected input file format to match output of calculate_linkage_disequilibrium.pl
 
 unless($ARGV[0]){
 	print STDERR $usage;
@@ -237,6 +240,13 @@ sub calculate_quasi_cliques {
 	#	#type	gene	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
 	#	nuc	Seq12_093009_HA_cds	406	A	G	0.00684	469	A	G	0.00125	27701	35	191	0	1	0	1.000000e+00
 	#	nuc	Seq12_093009_HA_cds	406	A	G	0.00684	559	A	G	0.00269	27662	75	191	0	1	0	1.000000e+00
+    # Yet newer format out of calculate_linkage_disequilibrium.pl (as of 2014-09-06) :
+	#	#group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
+	#	Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:C:713:G:A	437	A	C	0.04494	713	G	A	0.00924	25448	255	1255	0	8.18E-06	0	1.17E-04
+	#	Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:C:471:A:C	437	A	C	0.04494	471	A	C	0.02352	25045	656	1255	0	2.83E-14	0	1.22E-12
+	#	Group1	Sample1	nuc	Seq12_093009_HA_cds	437:A:G:713:G:A	437	A	G	0.03477	713	G	A	0.00924	25448	255	970	0	0.000139402	0	1.50E-03
+
+
 
     # I want to plot the network in R using 'network' package.
     # To do so, I need a graph file of edges and node attributes file
@@ -265,8 +275,12 @@ sub calculate_quasi_cliques {
 						# When does this occur that an edge will be found multiple times?  When there are multiple variant alleles and the variant alleles are linked with OR status is the same for both (>1 or <1) so that the consensus alleles are linked with each other.  It doesn't cause a duplication of the variant pairing, but it does duplicate the consensus pairing. e.g., 'codon-146-AAC:codon-238-GAT'  146 consensus codon is AAC, variant alleles AGC, ACC.  238 consensus codon GGT and variant allele GAT.  146 is compared to 238 twice (once for each allele in 146).  The OR = 0 in both, so codon-146-AAC is linked to codon-238-GAT in both.  p-values are '1.393300e-03', '1.090292e-04'.  Which to use?  They are kind of dependent p-values, so probably shouldn't combine them with Fisher's method.  Most of the time they are very similar (within 1 order of magnitude).  I'll just plot the stronger of the two.  
 						
     foreach (@$stats){
- 		if (scalar(@{$_}) > 1){
-    		my ( $type, $gene, $first_pos, $first_cons, $first_var, $first_var_freq, $second_pos, $second_cons, $second_var, $second_var_freq, $AB, $Ab, $aB, $ab, $p, $OR, $fdr ) = @{$_};
+ 	if (scalar(@{$_}) < 20){
+		print STDERR "Check input file to see if it has the correct number of columns.\n";
+		exit 1;
+	} 
+	elsif (scalar(@{$_}) > 1){
+    		my ( $group, $sample, $type, $gene, $comparison, $first_pos, $first_cons, $first_var, $first_var_freq, $second_pos, $second_cons, $second_var, $second_var_freq, $AB, $Ab, $aB, $ab, $p, $OR, $fdr ) = @{$_};
     		if ($fdr <= $FDR && exists($types->{$type})){		# Make sure the comparison passes the FDR threshold and is of the correct type.
 				$first_cons 	= join "-", $type, $first_pos, $first_cons;		# Consensus residue at the first position in the comparison
 				$first_var 	= join "-", $type, $first_pos, $first_var;		# Alternate residue at the first position
@@ -411,7 +425,7 @@ sub calculate_quasi_cliques {
 	
 		foreach (@$stats){
 			if (scalar(@{$_}) > 1){
-				my ( $type, $gene, $first_pos, $first_cons, $first_var, $second_pos, $second_cons, $second_var, $AB, $Ab, $aB, $ab, $p, $OR, $fdr ) = @{$_};
+				my ( $group, $sample, $type, $gene, $comparison, $first_pos, $first_cons, $first_var, $second_pos, $second_cons, $second_var, $AB, $Ab, $aB, $ab, $p, $OR, $fdr ) = @{$_};
 				if ($fdr < $FDR){
 					my $first  = join "-", $type, $first_pos, $first_cons . "/" . $first_var; 
 					my $second = join "-", $type, $second_pos, $second_cons . "/" . $second_var; 
