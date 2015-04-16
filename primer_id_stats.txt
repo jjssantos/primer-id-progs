@@ -1,0 +1,31 @@
+# Stats (2015-03-23)
+	# Mapping and Gap size stats for R1 - R2 spacing (before merging)
+		for i in logs/concat_nonoverlap_fastq_*.o*; do echo $i; cat $i | egrep "(mapped to the reference sequence)" ; cat $i | grep -A 10 "^Gap_size" $i; echo "..."; echo; done  > mapping_and_gap_size_stats.txt
+	# PrimerID match summary
+		for i in logs/filter_fastq_by_primerid_length_*.o*; do echo $i; cat $i | grep "sequences with"; echo; done > find_primerID_summary_stats.txt
+	# Primer trimming and splitting into regions
+		for i in logs/Btrim*.o*; do echo $i; cat $i | awk '{if ($0 ~ /Total sequences/ || $0 ~ /^Pattern distribution/){p = 1} else if ($0 ~ /^$/){p = 0} } {if (p == 1){print}}' ; echo; done > primer_trimming_split_into_region_stats.txt
+	# Auto-detected Gap start and size stats 
+		for i in logs/merge_primerid_groups_*.o*; do echo $i; cat $i | egrep "^(Many reads|Fraction of reads|Most common|Using)"; echo; done > gap_start_length_during_merge_stats.txt
+	# Retention based on primerID group size thresholds (also see group plots)
+		for i in logs/merge_primerid_groups_*.o*; do echo $i; head -50 $i | grep "primerID groups "; done > merge_primerID_retention_stats.txt
+	# Retention in conversion to amino acid (tossed based on early stop codons)
+		# for i in logs/convert_reads_to_amino_acid_*.o*; do echo $i; head -50 $i | grep " reads:" | grep -v Location; done  > convert_reads_good_tossed_stop_codons_stats.txt
+		for i in logs/convert_reads_to_amino_acid_*.o*; do echo -e "$i\t$(cat $i | grep "^Good")\t$(cat $i | grep "^Tossed")"; done > convert_reads_good_tossed_stop_codons_stats.txt
+	# Retention after majority block filtering.
+		out=majority_block_filtering_stats.txt; echo -e "Sample\tRegion\tAll\tMajority\tAllBAM\tMajorityBAM" > $out; for n in 0 1 2; do for s in 30_S1 31_S2 32_S3; do allbam=$(ls ${s}.contigs.pid.btrim.fastq*${n}*.bam); majbam=$(ls ${s}.contigs.pid.btrim.*${n}*.majority.bam); echo -e "$s\t$n\t$(samtools view $allbam | wc)\t$(samtools view $majbam | wc)\t${allbam}\t${majbam}" >> $out; done; done 
+			Sample	Region	All	Majority	AllBAM	MajorityBAM
+			30_S1	0	1381456	1342048	30_S1.contigs.pid.btrim.fastq.0.bam	30_S1.contigs.pid.btrim.0.majority.bam
+			31_S2	0	2193182	2140093	31_S2.contigs.pid.btrim.fastq.0.bam	31_S2.contigs.pid.btrim.0.majority.bam
+			32_S3	0	1812293	1765296	32_S3.contigs.pid.btrim.fastq.0.bam	32_S3.contigs.pid.btrim.0.majority.bam
+			30_S1	1	3256576	644774	30_S1.contigs.pid.btrim.fastq.1.bam	30_S1.contigs.pid.btrim.1.majority.bam
+			31_S2	1	2636748	912646	31_S2.contigs.pid.btrim.fastq.1.bam	31_S2.contigs.pid.btrim.1.majority.bam
+			32_S3	1	1509605	754059	32_S3.contigs.pid.btrim.fastq.1.bam	32_S3.contigs.pid.btrim.1.majority.bam
+			30_S1	2	1419899	1100724	30_S1.contigs.pid.btrim.fastq.2.bam	30_S1.contigs.pid.btrim.2.majority.bam
+			31_S2	2	2381865	2186627	31_S2.contigs.pid.btrim.fastq.2.bam	31_S2.contigs.pid.btrim.2.majority.bam
+			32_S3	2	2008742	1840456	32_S3.contigs.pid.btrim.fastq.2.bam	32_S3.contigs.pid.btrim.2.majority.bam
+	# Linked Variant pairs with various threshold FDR values:
+		out=summary_linked_variants_by_type_and_FDR_stats.txt; echo "## Note: each threshold column represents variants *in addition to* the previous columns." > $out; for i in *btrim.*linkage.minfreq0.0*.xls; do if [ -e $i ]; then ls $i; cat $i | grep -v "^#group" | perl -e'my $hash; LINE: while(<>){ my @F = split(/\t/); $hash->{'total'}->{$F[2]}++;  foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){ if ($F[-1] < $t){ $hash->{$t}->{$F[2]}++; next LINE; } } } print "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n"; foreach my $type (qw(nuc codon aa)){print "$type"; foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ my $c = $hash->{$t}->{$type} ? $hash->{$t}->{$type} : 0; print "\t$c"; } print "\n";}' ; fi; done  >> $out
+	# Enriched variants in treatment vs. control with various FDR values:
+		out=summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt; echo "## Note: each threshold column represents variants *in addition to* the previous columns." > $out; for type in nuc aa codon; do for i in compare_variant_freq_region_*/Passage_Parent.${type}.freq.pvalue.all.xls; do if [ -e $i ]; then ls $i; cat $i | grep -v "^name" | perl -se'my $hash; print "## Note: each threshold column represents variants in addition to the previous columns.\n";  LINE: while(<>){ my @F = split(/\t/); $hash->{$a}->{'total'}++;  foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){ if ($F[-1] < $t){ $hash->{$a}->{$t}++; next LINE; } } } print "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n"; foreach my $type (qw(nuc codon aa)){ next unless (exists($hash->{$type})); print "$type"; foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ my $c = $hash->{$type}->{$t} ? $hash->{$type}->{$t} : 0; print "\t$c"; } print "\n";}' -- -a=$type; fi; done; done >> $out
+		# This might change, if I make it so all can go in the same directory.  
