@@ -61,6 +61,7 @@ my $method = 'fisher';
 my $prefix = "Linkage_plot";
 GetOptions('save|s=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'mu=s' => \$mu, 'gamma=s' => \$gamma, 'FDR|F=s' => \$FDR, 'quasi|q' => \$quasi, 'var|v=s' => \$var, 'keeptmp' => \$keeptmp, 'method|m=s' => \$method, 'prefix=s' => \$prefix);
 
+my $Rscript_loc = '/usr/local/bio_apps/R-3.1.0/bin/Rscript';
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
 #-----------------------------------------------------------------------------
@@ -402,16 +403,16 @@ sub calculate_quasi_cliques {
 
 	close($temp_R_fh);
 	
-	if (check_for_Rscript()){
-		# Then we didn't find Rscript on the path.
-		my $copy_R_script_file_dir = $save_dir . "/$prefix" . "_network_plot_files";
-		print STDERR "Didn't find Rscript on the PATH!\nCopying the R script and files to $copy_R_script_file_dir.  You can run it manually like this:\ncd $copy_R_script_file_dir; Rscript temp_script.R\n";
-		system("cp -r $tempdir $copy_R_script_file_dir");
-		exit;
-	}
-	else {
-		system("Rscript $temp_R_script");
-	}
+	# if (check_for_Rscript()){
+	# 	# Then we didn't find Rscript on the path.
+	# 	my $copy_R_script_file_dir = $save_dir . "/$prefix" . "_network_plot_files";
+	# 	print STDERR "Didn't find Rscript on the PATH!\nCopying the R script and files to $copy_R_script_file_dir.  You can run it manually like this:\ncd $copy_R_script_file_dir; Rscript temp_script.R\n";
+	# 	system("cp -r $tempdir $copy_R_script_file_dir");
+	# 	exit;
+	# }
+	# else {
+		system("$Rscript_loc $temp_R_script");
+	# }
 	
 	
 	if ($quasi){
