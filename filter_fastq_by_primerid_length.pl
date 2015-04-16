@@ -41,17 +41,19 @@ my $usage= basename($0)." looks for a primerID or barcode of a defined length in
 the 5' end of a read.  If found, the primerID is trimmed and placed in the seqid in the 
 output fastq file.  Input fastq file must be unzipped.  It processes about 750 reads per 
 second.
-filter_fastq_by_primerid_length.pl [OPTIONS] <fastq> <size>
+filter_fastq_by_primerid_length.pl [OPTIONS] --file_in <fastq> --n <size> --post <seq>
 OPTIONS:
---pre	Sequence preceding the primerID.  Default, no sequence before primerID (i.e., 
-	primerID starts at extreme 5' end).
+--file_in	Input fastq file.  Required.
+--n     Size of primerID.  Required.
 --post	Sequence following the primerID.  Default, any sequence. 
 	Required!  Otherwise, the length of the primerID is meaningless.
+--output_dir	Output directory to save the files.
+--pre	Sequence preceding the primerID.  Default, no sequence before primerID (i.e., 
+	primerID starts at extreme 5' end).
 --removepost	Remove the \"post\" sequence in addition to the primerID.  Default is to keep the 
 	post sequence.
---n     int
-e.g., filter_fastq_by_primerid_length.pl --pre GC --post AAGCAGT myfile.fastq 8 2> out.err 
-	Outputs the files myfile.pid8bp.fastq and myfile.pid8bp.primerids.gz
+e.g., filter_fastq_by_primerid_length.pl --pre GC --post AAGCAGT --file_in myfile.fastq --n 8 2> out.err 
+	Outputs the files myfile.pid.fastq and myfile.pid.primerids.gz
 ";
 # --stdout	Print to STDOUT.
 
@@ -81,9 +83,16 @@ e.g., filter_fastq_by_primerid_length.pl --pre GC --post AAGCAGT myfile.fastq 8 
 # either we use getopts or not. using argv and get opts is confusing. For now I'm getting rid of
 # argv[1] and calling it n (because it's a number?)
 
+# 2015-04-16
+# Updated usage to match Philip's changes.
+
+
 die $usage unless ($n);
 
-warn "Please enter value for --post.\n" && exit unless ($post); 
+unless ($post){
+	warn "Please enter value for --post.\n";
+	exit 1;
+}
 
 my $start_time = time;
 
