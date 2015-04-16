@@ -1,0 +1,5 @@
+Comparison	Treatment	Control
+1	E1	Parent
+2	B7_E2	Parent_B7
+3	Immun_12_1_12	Mock_12_1_12
+4	Immun_8_30_12	Mock_8_30_12

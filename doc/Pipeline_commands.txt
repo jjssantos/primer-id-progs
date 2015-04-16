@@ -1,0 +1,400 @@
+2014-07-22
+
+# Pre-requisites
+1. Environment
+	a. Perl 5.16.2 (although would probably work okay with 5.12 as well) /usr/local/bio_apps/perl-5.16.2/bin/perl
+	b. 
+
+2. Perl scripts 
+	a. concatenate_fastq.pl
+	b. filter_fastq_by_primerid_length.pl
+	c. get_majority_start_stop.pl
+	d. merge_primerid_read_groups.pl
+	e. convert_reads_to_amino_acid.pl
+	f. calculate_linkage_disequilibrium.pl
+	g. fasta_collapser.pl
+	h. compare_variant_frequency.pl
+	i. 
+
+3. Perl modules
+	a. aomisc.pm
+	b. Bioperl
+	c. Bio::Tools::Run::Alignment::Clustalw
+	d. Bio::DB::Sam
+	e. Statistics::R
+	f. Statistics::Distributions
+	g. Parallel::Loops
+	h. File::Which
+	i. Array::Utils
+	j. File::Slurp
+	k. IO::Zlib
+
+4. Shell scripts
+	a. get_majority_block_bam.sh
+
+5. External software packages/executables
+	a. SortSam version 1.75 or more recent /usr/local/bio_apps/picard-tools-1.75/SortSam.jar
+	b. bwa version 0.7.5a-r405 or more recent.  /usr/local/bio_apps/bwa-0.7.5a/bwa
+	c. BEDTools version 2.16.2 or more recent.   /usr/local/bio_apps/BEDTools/bin/
+	d. FASTX toolkit version 0.0.13 or more recent. /usr/local/bio_apps/fastx_toolkit-0.0.13/bin/
+	e. pandaseq v. 2.4 or more recent.  /nethome/wanj3/stage/bin/pandaseq
+	f. SAMTools v. 0.1.18 or more recent.  /usr/local/bio_apps/samtools-0.1.18/samtools
+	g. R version 3.1.0 or more recent. /usr/local/bio_apps/R-3.1.0/bin/R
+		1. 'network' library
+
+
+# Test subsample files
+mkdir /hpcdata/bcbb/shared/projects/PrimerID/test_run_$(date +%Y%m%d)
+cd /hpcdata/bcbb/shared/projects/PrimerID/test_run_$(date +%Y%m%d)
+
+# Make links to the test files
+for i in /hpcdata/bcbb/shared/projects/PrimerID/Test_data/*fastq; do ln -s $i ./; done
+
+# Prepare environment and required files
+mkdir logs
+cp -pr /hpcdata/bcbb/shared/projects/PrimerID/Test_data/Seq12_093009_HA_cds.fa ./
+cp -pr /hpcdata/bcbb/shared/projects/PrimerID/Test_data/CAL0409_HA_cds.fa ./
+cp /hpcdata/bcbb/shared/projects/PrimerID/Test_data/primers.btrim.Seq12.txt ./
+cp /hpcdata/bcbb/shared/projects/PrimerID/Test_data/primers.btrim.CAL04.txt ./
+bwa index Seq12_093009_HA_cds.fa 
+bwa index CAL0409_HA_cds.fa 
+
+# Trim R2 reads.
+	# -f option is where trimming should be begin.  In our case, we have 4 random bases at the beginning of our R2 read, so we trim with the "first" base 5.  This should be optional to the user.  The description could be something like "First base to keep in R2 reads (number of random bases to trim from 5' end of R2 read plus 1).  Default is 1 -- i.e., no trimming."
+	# -Q mean Sanger quality scores, i.e., Phred+33.  Default is Phred+64
+for i in *_2.fastq; do echo "fastx_trimmer -i $i -o ${i/.fastq/}.trim.fastq -f 5 -Q 33"; done
+	Commands:
+	fastx_trimmer -i Sample_10_2.fastq -o Sample_10_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_11_2.fastq -o Sample_11_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_12_2.fastq -o Sample_12_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_13_2.fastq -o Sample_13_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_14_2.fastq -o Sample_14_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_15_2.fastq -o Sample_15_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_16_2.fastq -o Sample_16_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_6_2.fastq -o Sample_6_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_7_2.fastq -o Sample_7_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_8_2.fastq -o Sample_8_2.trim.fastq -f 5 -Q 33
+	fastx_trimmer -i Sample_9_2.fastq -o Sample_9_2.trim.fastq -f 5 -Q 33
+
+
+# Make contigs
+	# In the future the plan is that this will all be combined into one script (concatenate_fastq.pl) so that the user won't have to specify whether there is overlap between the reads or not -- we'll be able to tell from the multiple-sequence alignment.
+	# For now, I run it concatenate_fastq.pl for non-overlapping paired-end reads and pandaseq for overlapping paired-end reads.
+	# Concatenate non-overlapping reads. Seq12 reference, samples #6-10. 	
+	for i in {6..10}; do p=8; qsub -b y -j y -V -cwd -S /bin/bash -N concat_nonoverlap_fastq_sample_${i} -l h_vmem=1G -o logs/ -pe threaded $p  "concatenate_fastq.pl Sample_${i}_1.fastq Sample_${i}_2.trim.fastq --cpu $p -r Seq12_093009_HA_cds.fa -o Sample_${i}.contigs.fastq"; done
+	Commands:
+		qsub -b y -j y -V -cwd -S /bin/bash -N concat_nonoverlap_fastq_sample_6 -l h_vmem=1G -o logs/ -pe threaded 8 concatenate_fastq.pl Sample_6_1.fastq Sample_6_2.trim.fastq --cpu 8 -r Seq12_093009_HA_cds.fa -o Sample_6.contigs.fastq
+		qsub -b y -j y -V -cwd -S /bin/bash -N concat_nonoverlap_fastq_sample_7 -l h_vmem=1G -o logs/ -pe threaded 8 concatenate_fastq.pl Sample_7_1.fastq Sample_7_2.trim.fastq --cpu 8 -r Seq12_093009_HA_cds.fa -o Sample_7.contigs.fastq
+		qsub -b y -j y -V -cwd -S /bin/bash -N concat_nonoverlap_fastq_sample_8 -l h_vmem=1G -o logs/ -pe threaded 8 concatenate_fastq.pl Sample_8_1.fastq Sample_8_2.trim.fastq --cpu 8 -r Seq12_093009_HA_cds.fa -o Sample_8.contigs.fastq
+		qsub -b y -j y -V -cwd -S /bin/bash -N concat_nonoverlap_fastq_sample_9 -l h_vmem=1G -o logs/ -pe threaded 8 concatenate_fastq.pl Sample_9_1.fastq Sample_9_2.trim.fastq --cpu 8 -r Seq12_093009_HA_cds.fa -o Sample_9.contigs.fastq
+		qsub -b y -j y -V -cwd -S /bin/bash -N concat_nonoverlap_fastq_sample_10 -l h_vmem=1G -o logs/ -pe threaded 8 concatenate_fastq.pl Sample_10_1.fastq Sample_10_2.trim.fastq --cpu 8 -r Seq12_093009_HA_cds.fa -o Sample_10.contigs.fastq
+
+	# Make contigs for overlapping reads. CAL04 reference, samples #11-16
+	for i in {11..16}; do pandaseq -f Sample_${i}_1.fastq -r Sample_${i}_2.trim.fastq  -F  > Sample_${i}.contigs.fastq 2> logs/pandaseq_Sample_${i}_log.txt
+	Commands:
+		pandaseq -f Sample_11_1.fastq -r Sample_11_2.trim.fastq  -F  > Sample_11.contigs.fastq 2> logs/pandaseq_Sample_11_log.txt
+		pandaseq -f Sample_12_1.fastq -r Sample_12_2.trim.fastq  -F  > Sample_12.contigs.fastq 2> logs/pandaseq_Sample_12_log.txt
+		pandaseq -f Sample_13_1.fastq -r Sample_13_2.trim.fastq  -F  > Sample_13.contigs.fastq 2> logs/pandaseq_Sample_13_log.txt
+		pandaseq -f Sample_14_1.fastq -r Sample_14_2.trim.fastq  -F  > Sample_14.contigs.fastq 2> logs/pandaseq_Sample_14_log.txt
+		pandaseq -f Sample_15_1.fastq -r Sample_15_2.trim.fastq  -F  > Sample_15.contigs.fastq 2> logs/pandaseq_Sample_15_log.txt
+		pandaseq -f Sample_16_1.fastq -r Sample_16_2.trim.fastq  -F  > Sample_16.contigs.fastq 2> logs/pandaseq_Sample_16_log.txt
+
+
+# Find 10N-CA primerID sequence 
+for i in {1..16}; do f=Sample_${i}.contigs.fastq; qsub -b y -j y -V -cwd -S /bin/bash  -N filter_fastq_by_primerid_length_sample_${i} -o logs/ "filter_fastq_by_primerid_length.pl --removepost --post CA $f 10"; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_1 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_1.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_2 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_2.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_3 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_3.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_4 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_4.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_5 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_5.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_6 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_6.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_7 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_7.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_8 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_8.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_9 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_9.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_10 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_10.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_11 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_11.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_12 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_12.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_13 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_13.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_14 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_14.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_15 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_15.contigs.fastq 10
+	qsub -b y -j y -V -cwd -S /bin/bash -N filter_fastq_by_primerid_length_sample_16 -o logs/ filter_fastq_by_primerid_length.pl --removepost --post CA Sample_16.contigs.fastq 10
+
+
+# Split into barcode regions and remove primer sequences
+	# Made separate primer files for Seq12 and CAL04. Switched -u and -v to allow 2 errors instead of 4 (Will's recommendation)
+for i in {6..10};  do primers=primers.btrim.Seq12.txt; qsub -b y -j y -V -cwd -S /bin/bash  -N Btrim_Sample_${i} -o logs/ "Btrim64 -p $primers -t Sample_${i}.contigs.pid10bp.fastq -o Sample_${i}.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 "; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_6 -o logs/ Btrim64 -p primers.btrim.Seq12.txt -t Sample_6.contigs.pid10bp.fastq -o Sample_6.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_7 -o logs/ Btrim64 -p primers.btrim.Seq12.txt -t Sample_7.contigs.pid10bp.fastq -o Sample_7.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_8 -o logs/ Btrim64 -p primers.btrim.Seq12.txt -t Sample_8.contigs.pid10bp.fastq -o Sample_8.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_9 -o logs/ Btrim64 -p primers.btrim.Seq12.txt -t Sample_9.contigs.pid10bp.fastq -o Sample_9.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_10 -o logs/ Btrim64 -p primers.btrim.Seq12.txt -t Sample_10.contigs.pid10bp.fastq -o Sample_10.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+for i in {11..16}; do primers=primers.btrim.CAL04.txt; echo qsub -b y -j y -V -cwd -S /bin/bash  -N Btrim_Sample_${i} -o logs/ "Btrim64 -p $primers -t Sample_${i}.contigs.pid10bp.fastq -o Sample_${i}.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 "; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_11 -o logs/ Btrim64 -p primers.btrim.CAL04.txt -t Sample_11.contigs.pid10bp.fastq -o Sample_11.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_12 -o logs/ Btrim64 -p primers.btrim.CAL04.txt -t Sample_12.contigs.pid10bp.fastq -o Sample_12.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_13 -o logs/ Btrim64 -p primers.btrim.CAL04.txt -t Sample_13.contigs.pid10bp.fastq -o Sample_13.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_14 -o logs/ Btrim64 -p primers.btrim.CAL04.txt -t Sample_14.contigs.pid10bp.fastq -o Sample_14.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_15 -o logs/ Btrim64 -p primers.btrim.CAL04.txt -t Sample_15.contigs.pid10bp.fastq -o Sample_15.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+	qsub -b y -j y -V -cwd -S /bin/bash -N Btrim_Sample_16 -o logs/ Btrim64 -p primers.btrim.CAL04.txt -t Sample_16.contigs.pid10bp.fastq -o Sample_16.contigs.pid10bp.btrim.fastq -u 2 -v 2 -S -B -e 300 
+
+# Align with bwa mem, convert to BAM and get majority start/stop
+	# Not using the check_btrimmed_read_count.pl method like last time because I only had one amplicon in primers.btrim.txt
+	# Separate reference for each set of samples
+p=8; for i in {6..10};   do ref=Seq12_093009_HA_cds.fa; for sample in Sample_${i}.contigs.pid10bp.btrim.fastq.*; do echo qsub -b y -j y -V -cwd -S /bin/bash  -N get_majority_block_${sample/contigs.pid10bp.btrim.fastq/region} -o logs/ -pe threaded $p -l h_vmem=1G get_majority_block_bam.sh -p $p $ref $sample; done; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_6.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_6.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_6.region.1 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_6.contigs.pid10bp.btrim.fastq.1
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_7.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_7.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_7.region.1 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_7.contigs.pid10bp.btrim.fastq.1
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_8.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_8.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_8.region.1 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_8.contigs.pid10bp.btrim.fastq.1
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_9.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_9.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_9.region.1 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_9.contigs.pid10bp.btrim.fastq.1
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_10.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_10.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_10.region.1 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 Seq12_093009_HA_cds.fa Sample_10.contigs.pid10bp.btrim.fastq.1
+p=8; for i in {11..16};  do ref=CAL0409_HA_cds.fa; for sample in Sample_${i}.contigs.pid10bp.btrim.fastq.*; do echo qsub -b y -j y -V -cwd -S /bin/bash  -N get_majority_block_${sample/contigs.pid10bp.btrim.fastq/region} -o logs/ -pe threaded $p -l h_vmem=1G get_majority_block_bam.sh -p $p $ref $sample; done; done
+Commands:
+	# Make sure that the reference files are indexed before aligning the reads.
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_11.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 CAL0409_HA_cds.fa Sample_11.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_12.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 CAL0409_HA_cds.fa Sample_12.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_13.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 CAL0409_HA_cds.fa Sample_13.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_14.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 CAL0409_HA_cds.fa Sample_14.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_15.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 CAL0409_HA_cds.fa Sample_15.contigs.pid10bp.btrim.fastq.0
+	qsub -b y -j y -V -cwd -S /bin/bash -N get_majority_block_Sample_16.region.0 -o logs/ -pe threaded 8 -l h_vmem=1G get_majority_block_bam.sh -p 8 CAL0409_HA_cds.fa Sample_16.contigs.pid10bp.btrim.fastq.0
+
+		
+# Graph the output coverage files
+for i in {6..16}; do for sample in Sample_${i}.contigs.pid10bp.btrim.*.majority.bam; do echo qsub -b y -j y -V -cwd -S /bin/bash  -N graph_coverage_sample${i} -o logs/ graph_coverage.pl $sample; done; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample6 -o logs/ graph_coverage.pl Sample_6.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample6 -o logs/ graph_coverage.pl Sample_6.contigs.pid10bp.btrim.1.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample7 -o logs/ graph_coverage.pl Sample_7.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample7 -o logs/ graph_coverage.pl Sample_7.contigs.pid10bp.btrim.1.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample8 -o logs/ graph_coverage.pl Sample_8.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample8 -o logs/ graph_coverage.pl Sample_8.contigs.pid10bp.btrim.1.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample9 -o logs/ graph_coverage.pl Sample_9.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample9 -o logs/ graph_coverage.pl Sample_9.contigs.pid10bp.btrim.1.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample10 -o logs/ graph_coverage.pl Sample_10.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample10 -o logs/ graph_coverage.pl Sample_10.contigs.pid10bp.btrim.1.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample11 -o logs/ graph_coverage.pl Sample_11.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample12 -o logs/ graph_coverage.pl Sample_12.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample13 -o logs/ graph_coverage.pl Sample_13.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample14 -o logs/ graph_coverage.pl Sample_14.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample15 -o logs/ graph_coverage.pl Sample_15.contigs.pid10bp.btrim.0.majority.bam
+	qsub -b y -j y -V -cwd -S /bin/bash -N graph_coverage_sample16 -o logs/ graph_coverage.pl Sample_16.contigs.pid10bp.btrim.0.majority.bam
+
+# Merge the reads by primerid
+p=8; for i in {6..16}; do for sample in Sample_${i}.contigs.pid10bp.btrim.*.majority.bam; do a=${sample/.majority.bam/}; echo qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_${a} -o logs/ -pe threaded $p -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p $p $sample; done; done
+Commands:
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_6.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_6.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_6.contigs.pid10bp.btrim.1 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_6.contigs.pid10bp.btrim.1.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_7.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_7.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_7.contigs.pid10bp.btrim.1 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_7.contigs.pid10bp.btrim.1.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_8.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_8.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_8.contigs.pid10bp.btrim.1 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_8.contigs.pid10bp.btrim.1.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_9.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_9.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_9.contigs.pid10bp.btrim.1 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_9.contigs.pid10bp.btrim.1.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_10.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_10.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_10.contigs.pid10bp.btrim.1 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_10.contigs.pid10bp.btrim.1.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_11.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_11.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_12.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_12.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_13.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_13.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_14.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_14.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_15.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_15.contigs.pid10bp.btrim.0.majority.bam
+	qsub -V -cwd -j y -b y -S /bin/bash -q long.q,memLong.q -N merge_primerid_groups_Sample_16.contigs.pid10bp.btrim.0 -o logs/ -pe threaded 8 -l h_vmem=5G merge_primerid_read_groups.pl --plot_counts -m 3 -x 50 -p 8 Sample_16.contigs.pid10bp.btrim.0.majority.bam
+
+# Convert merged reads to codons and amino acids and get frequency tables and clean read/peptide alignment files.
+	# Separate reference for each set of samples
+for i in {6..10};  do ref=Seq12_093009_HA_cds.fa; p=5; for file in Sample_${i}.contigs.pid10bp.btrim.*.majority.cons.fasta; do a=${file/.majority.cons.fasta/}; echo qsub -b y -j y -V -cwd -S /bin/bash  -N convert_reads_to_amino_acid_${a} -pe threaded $p -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files $file --ref $ref --prefix ${file/.fasta/} -p $p; done; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_6.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_6.contigs.pid10bp.btrim.0.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_6.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_6.contigs.pid10bp.btrim.1 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_6.contigs.pid10bp.btrim.1.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_6.contigs.pid10bp.btrim.1.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_7.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_7.contigs.pid10bp.btrim.0.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_7.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_7.contigs.pid10bp.btrim.1 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_7.contigs.pid10bp.btrim.1.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_7.contigs.pid10bp.btrim.1.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_8.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_8.contigs.pid10bp.btrim.0.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_8.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_8.contigs.pid10bp.btrim.1 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_8.contigs.pid10bp.btrim.1.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_8.contigs.pid10bp.btrim.1.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_9.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_9.contigs.pid10bp.btrim.0.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_9.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_9.contigs.pid10bp.btrim.1 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_9.contigs.pid10bp.btrim.1.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_9.contigs.pid10bp.btrim.1.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_10.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_10.contigs.pid10bp.btrim.0.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_10.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_10.contigs.pid10bp.btrim.1 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_10.contigs.pid10bp.btrim.1.majority.cons.fasta --ref Seq12_093009_HA_cds.fa --prefix Sample_10.contigs.pid10bp.btrim.1.majority.cons -p 5
+for i in {11..16}; do ref=CAL0409_HA_cds.fa; p=5; for file in Sample_${i}.contigs.pid10bp.btrim.*.majority.cons.fasta; do a=${file/.majority.cons.fasta/}; echo qsub -b y -j y -V -cwd -S /bin/bash  -N convert_reads_to_amino_acid_${a} -pe threaded $p -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files $file --ref $ref --prefix ${file/.fasta/} -p $p; done; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_11.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_11.contigs.pid10bp.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --prefix Sample_11.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_12.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_12.contigs.pid10bp.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --prefix Sample_12.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_13.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_13.contigs.pid10bp.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --prefix Sample_13.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_14.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_14.contigs.pid10bp.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --prefix Sample_14.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_15.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_15.contigs.pid10bp.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --prefix Sample_15.contigs.pid10bp.btrim.0.majority.cons -p 5
+	qsub -b y -j y -V -cwd -S /bin/bash -N convert_reads_to_amino_acid_Sample_16.contigs.pid10bp.btrim.0 -pe threaded 5 -l h_vmem=2G -o logs/ convert_reads_to_amino_acid.pl --files Sample_16.contigs.pid10bp.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --prefix Sample_16.contigs.pid10bp.btrim.0.majority.cons -p 5
+
+# Calculate linkage disequilibrium for all variants found above a certain frequency level.  Need to do for each region separately (e.g., btrim.0, btrim.1, etc. )
+for v in 0.001 0.0005 0.0001; do for n in {6..16}; do i=Sample_${n}.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls; echo qsub -b y -j y -V -cwd -S /bin/bash  -N linkage_min_${v}_${i/.minfreq0.xls/} -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl $i ${i/.variants.minfreq0.xls/}.uniq.cleanreads.txt ${i/.variants.minfreq0.xls/}.uniq.cleanpeptides.txt --cpu 4 --variant_threshold $v --prefix ${i/.minfreq0.xls/}; done; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_6.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_6.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_7.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_7.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_8.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_8.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_9.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_9.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_10.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_10.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_11.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_11.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_12.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_12.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_13.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_13.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_14.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_14.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_15.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_15.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_16.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_16.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_6.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_6.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_7.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_7.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_8.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_8.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_9.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_9.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_10.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_10.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_11.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_11.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_12.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_12.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_13.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_13.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_14.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_14.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_15.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_15.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_16.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_16.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_6.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_6.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_7.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_7.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_8.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_8.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_9.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_9.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_10.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_10.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_11.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_11.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_12.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_12.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_13.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_13.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_14.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_14.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_15.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_15.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants.minfreq0.xls Sample_16.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanreads.txt Sample_16.contigs.pid10bp.btrim.0.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants
+for v in 0.001 0.0005 0.0001; do for n in {6..10}; do i=Sample_${n}.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls; echo qsub -b y -j y -V -cwd -S /bin/bash  -N linkage_min_${v}_${i/.minfreq0.xls/} -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl $i ${i/.variants.minfreq0.xls/}.uniq.cleanreads.txt ${i/.variants.minfreq0.xls/}.uniq.cleanpeptides.txt --cpu 4 --variant_threshold $v --prefix ${i/.minfreq0.xls/}; done; done
+Commands:
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_6.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_6.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_7.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_7.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_8.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_8.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_9.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_9.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.001_Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_10.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_10.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.001 --prefix Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_6.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_6.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_7.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_7.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_8.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_8.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_9.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_9.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0005_Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_10.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_10.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0005 --prefix Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_6.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_6.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_7.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_7.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_8.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_8.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_9.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_9.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants
+	qsub -b y -j y -V -cwd -S /bin/bash -N linkage_min_0.0001_Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants -pe threaded 4 -l h_vmem=1G -o logs/ calculate_linkage_disequilibrium.pl Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants.minfreq0.xls Sample_10.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanreads.txt Sample_10.contigs.pid10bp.btrim.1.majority.cons.uniq.cleanpeptides.txt --cpu 4 --variant_threshold 0.0001 --prefix Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants
+
+
+
+# Stats
+	# Retention based on primerID group size thresholds
+		for i in logs/merge_primerid_groups_Sample_*.o*; do echo $i; head -50 $i | grep "primerID groups "; done
+	# Retention in conversion to amino acid (tossed based on ambiguous characters outside of the gap)
+		for i in logs/convert_reads_to_amino_acid_Sample_*.o*; do echo $i; head -50 $i | grep " reads:" | grep -v Location; done
+
+
+# Added 2014-11-05 (you can see some example output in /hpcdata/bcbb/oleraj/BenninkJack/Will_Ince/2014-07-22_Test_dataset/Subsample_test):
+
+cat Comparisons.txt 
+Comparison	Treatment	Control
+1	E1	Parent
+2	B7_E2	Parent_B7
+3	Immun_12_1_12	Mock_12_1_12
+4	Immun_8_30_12	Mock_8_30_12
+
+cat Sample_metadata.txt 
+Sample_prefix	CDS_Reference_file	Primer_file	Group
+Sample_1	Seq12_093009_HA_cds.fa	Seq12_primers.txt	E1
+Sample_2	Seq12_093009_HA_cds.fa	Seq12_primers.txt	E1
+Sample_3	Seq12_093009_HA_cds.fa	Seq12_primers.txt	E1
+Sample_4	Seq12_093009_HA_cds.fa	Seq12_primers.txt	Parent
+Sample_5	Seq12_093009_HA_cds.fa	Seq12_primers.txt	Parent
+Sample_6	Seq12_093009_HA_cds.fa	Seq12_primers.txt	B7_E2
+Sample_7	Seq12_093009_HA_cds.fa	Seq12_primers.txt	B7_E2
+Sample_8	Seq12_093009_HA_cds.fa	Seq12_primers.txt	B7_E2
+Sample_9	Seq12_093009_HA_cds.fa	Seq12_primers.txt	Parent_B7
+Sample_10	Seq12_093009_HA_cds.fa	Seq12_primers.txt	Parent_B7
+Sample_11	CAL0409_HA_cds.fa	CAL0409_primers.txt	Mock_12_1_12
+Sample_12	CAL0409_HA_cds.fa	CAL0409_primers.txt	Mock_12_1_12
+Sample_13	CAL0409_HA_cds.fa	CAL0409_primers.txt	Mock_12_1_12
+Sample_14	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_12_1_12
+Sample_15	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_12_1_12
+Sample_16	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_12_1_12
+Sample_17	CAL0409_HA_cds.fa	CAL0409_primers.txt	Mock_8_30_12
+Sample_18	CAL0409_HA_cds.fa	CAL0409_primers.txt	Mock_8_30_12
+Sample_19	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_8_30_12
+Sample_20	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_8_30_12
+Sample_21	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_8_30_12
+Sample_22	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_8_30_12
+Sample_23	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_8_30_12
+Sample_24	CAL0409_HA_cds.fa	CAL0409_primers.txt	Immun_8_30_12
+
+
+
+# Calculate linkage between variants within a sample, taking into account any replicates for a sample
+# Use the Sample_metadata.txt file to determine which files to merge
+combine_linkage_values.pl <variants_linkage file 1> <variants_linkage file 2> ... 
+	variants_linkage files are the output of calculate_linkage_disequilibrium.  Each input file is a separate replicate.  Single replicate is fine too.  
+	combine_linkage_values.pl takes variants linkage file from calculate_linkage_disequilibrium.pl and plots them in R.
+	Requires R on the path and requires the 'network' library to be installed in R.
+	# e.g., combine_linkage_values.pl --prefix Sample_5_linkage_varminfreq0.001_fixedcoordinates Sample_5.contigs.pid10bp.btrim.2.majority.cons.variants.linkage.minfreq0.001.fixedcoordinates.xls --var aa
+for region in 0 1; do for v in 0.001 0.0005 0.0001; do for c in B7_E2 Parent_B7 Immun_12_1_12 Mock_12_1_12; do prefix=${c}.combined.variants.linkage.${region}.minfreq${v}; files=$(for s in $(cat Sample_metadata.txt | awk -v c=$c '$NF == c {print $1}' | xargs); do file=${s}.contigs.pid10bp.btrim.${region}.majority.cons.variants.linkage.minfreq${v}.xls; if [ -e "$file" ]; then ls $file; fi; done | xargs); if [ -n "$files" ]; then echo "qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_${c}_${region}_${v} -o logs/ combine_linkage_values.pl --prefix $prefix $files --FDR 0.05 --var aa,codon,nuc -m fisher" --keeptmp; fi; done; done; done
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_B7_E2_0_0.001 -o logs/ combine_linkage_values.pl --prefix B7_E2.combined.variants.linkage.0.minfreq0.001 Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Parent_B7_0_0.001 -o logs/ combine_linkage_values.pl --prefix Parent_B7.combined.variants.linkage.0.minfreq0.001 Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Immun_12_1_12_0_0.001 -o logs/ combine_linkage_values.pl --prefix Immun_12_1_12.combined.variants.linkage.0.minfreq0.001 Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Mock_12_1_12_0_0.001 -o logs/ combine_linkage_values.pl --prefix Mock_12_1_12.combined.variants.linkage.0.minfreq0.001 Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_B7_E2_0_0.0005 -o logs/ combine_linkage_values.pl --prefix B7_E2.combined.variants.linkage.0.minfreq0.0005 Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Parent_B7_0_0.0005 -o logs/ combine_linkage_values.pl --prefix Parent_B7.combined.variants.linkage.0.minfreq0.0005 Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Immun_12_1_12_0_0.0005 -o logs/ combine_linkage_values.pl --prefix Immun_12_1_12.combined.variants.linkage.0.minfreq0.0005 Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Mock_12_1_12_0_0.0005 -o logs/ combine_linkage_values.pl --prefix Mock_12_1_12.combined.variants.linkage.0.minfreq0.0005 Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0005.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_B7_E2_0_0.0001 -o logs/ combine_linkage_values.pl --prefix B7_E2.combined.variants.linkage.0.minfreq0.0001 Sample_6.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_7.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_8.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Parent_B7_0_0.0001 -o logs/ combine_linkage_values.pl --prefix Parent_B7.combined.variants.linkage.0.minfreq0.0001 Sample_9.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_10.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Immun_12_1_12_0_0.0001 -o logs/ combine_linkage_values.pl --prefix Immun_12_1_12.combined.variants.linkage.0.minfreq0.0001 Sample_14.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_15.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_16.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Mock_12_1_12_0_0.0001 -o logs/ combine_linkage_values.pl --prefix Mock_12_1_12.combined.variants.linkage.0.minfreq0.0001 Sample_11.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_12.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls Sample_13.contigs.pid10bp.btrim.0.majority.cons.variants.linkage.minfreq0.0001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_B7_E2_1_0.001 -o logs/ combine_linkage_values.pl --prefix B7_E2.combined.variants.linkage.1.minfreq0.001 Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Parent_B7_1_0.001 -o logs/ combine_linkage_values.pl --prefix Parent_B7.combined.variants.linkage.1.minfreq0.001 Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.001.xls Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_B7_E2_1_0.0005 -o logs/ combine_linkage_values.pl --prefix B7_E2.combined.variants.linkage.1.minfreq0.0005 Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0005.xls Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0005.xls Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0005.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Parent_B7_1_0.0005 -o logs/ combine_linkage_values.pl --prefix Parent_B7.combined.variants.linkage.1.minfreq0.0005 Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0005.xls Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0005.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_B7_E2_1_0.0001 -o logs/ combine_linkage_values.pl --prefix B7_E2.combined.variants.linkage.1.minfreq0.0001 Sample_6.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0001.xls Sample_7.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0001.xls Sample_8.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+	qsub -b y -j y -V -cwd -S /bin/bash -N combined_sample_linkage_group_Parent_B7_1_0.0001 -o logs/ combine_linkage_values.pl --prefix Parent_B7.combined.variants.linkage.1.minfreq0.0001 Sample_9.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0001.xls Sample_10.contigs.pid10bp.btrim.1.majority.cons.variants.linkage.minfreq0.0001.xls --FDR 0.05 --var aa,codon,nuc -m fisher
+
+
+
+# Compare Samples to each other to look for changes in frequency distribution.
+# Use the Comparisons.txt input file and the Sample_metadata.txt file to determine which files to merge and which comparisons to make
+compare_variant_frequency.pl takes frequency tables (nucleotide, amino acid or codon) from 
+	convert_reads_to_amino_acid.pl and compares frequency distribution between two samples or 
+	two groups of samples using Fisher's Exact test with FDR correction.
+
+	Usage: compare_variant_frequency.pl <Sample 1> <Sample 2>
+	# e.g., compare_variant_frequency.pl --label E1,E0 $(ls Sample_1.contigs.pid10bp.btrim.2.majority.nuc.tally.xls Sample_2.contigs.pid10bp.btrim.2.majority.nuc.tally.xls Sample_3.contigs.pid10bp.btrim.2.majority.nuc.tally.xls| cdel.pl ) $(ls Sample_4.contigs.pid10bp.btrim.2.majority.nuc.tally.xls Sample_5.contigs.pid10bp.btrim.2.majority.nuc.tally.xls | cdel.pl) --keeptmp --save E0_E1_premerge
+
+
+for c in "B7_E2 Parent_B7" "Immun_12_1_12 Mock_12_1_12"; do set $c; for i in aa nuc codon; do suffix=".majority.cons.${i}.tally.xls"; S1=$(for s in $(cat Sample_metadata.txt | awk -v c=$1 '$NF == c {print $1}' | xargs); do ls ${s}.contigs.pid10bp.btrim.*${suffix}; done | cdel.pl); S2=$(for s in $(cat Sample_metadata.txt | awk -v c=$2 '$NF == c {print $1}' | xargs); do ls ${s}.contigs.pid10bp.btrim.*${suffix}; done | cdel.pl); echo "qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_${1}_vs_${2}_${i} -o logs/ compare_variant_frequency.pl --label ${1},${2} --keeptmp --save compare_${1}_vs_${2}_${i} $S1 $S2"; done; done
+	qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_B7_E2_vs_Parent_B7_aa -o logs/ compare_variant_frequency.pl --label B7_E2,Parent_B7 --keeptmp --save compare_B7_E2_vs_Parent_B7_aa Sample_6.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_6.contigs.pid10bp.btrim.1.majority.cons.aa.tally.xls,Sample_7.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_7.contigs.pid10bp.btrim.1.majority.cons.aa.tally.xls,Sample_8.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_8.contigs.pid10bp.btrim.1.majority.cons.aa.tally.xls Sample_9.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_9.contigs.pid10bp.btrim.1.majority.cons.aa.tally.xls,Sample_10.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_10.contigs.pid10bp.btrim.1.majority.cons.aa.tally.xls
+	qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_B7_E2_vs_Parent_B7_nuc -o logs/ compare_variant_frequency.pl --label B7_E2,Parent_B7 --keeptmp --save compare_B7_E2_vs_Parent_B7_nuc Sample_6.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_6.contigs.pid10bp.btrim.1.majority.cons.nuc.tally.xls,Sample_7.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_7.contigs.pid10bp.btrim.1.majority.cons.nuc.tally.xls,Sample_8.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_8.contigs.pid10bp.btrim.1.majority.cons.nuc.tally.xls Sample_9.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_9.contigs.pid10bp.btrim.1.majority.cons.nuc.tally.xls,Sample_10.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_10.contigs.pid10bp.btrim.1.majority.cons.nuc.tally.xls
+	qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_B7_E2_vs_Parent_B7_codon -o logs/ compare_variant_frequency.pl --label B7_E2,Parent_B7 --keeptmp --save compare_B7_E2_vs_Parent_B7_codon Sample_6.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_6.contigs.pid10bp.btrim.1.majority.cons.codon.tally.xls,Sample_7.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_7.contigs.pid10bp.btrim.1.majority.cons.codon.tally.xls,Sample_8.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_8.contigs.pid10bp.btrim.1.majority.cons.codon.tally.xls Sample_9.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_9.contigs.pid10bp.btrim.1.majority.cons.codon.tally.xls,Sample_10.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_10.contigs.pid10bp.btrim.1.majority.cons.codon.tally.xls
+	qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_Immun_12_1_12_vs_Mock_12_1_12_aa -o logs/ compare_variant_frequency.pl --label Immun_12_1_12,Mock_12_1_12 --keeptmp --save compare_Immun_12_1_12_vs_Mock_12_1_12_aa Sample_14.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_15.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_16.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls Sample_11.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_12.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls,Sample_13.contigs.pid10bp.btrim.0.majority.cons.aa.tally.xls
+	qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_Immun_12_1_12_vs_Mock_12_1_12_nuc -o logs/ compare_variant_frequency.pl --label Immun_12_1_12,Mock_12_1_12 --keeptmp --save compare_Immun_12_1_12_vs_Mock_12_1_12_nuc Sample_14.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_15.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_16.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls Sample_11.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_12.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls,Sample_13.contigs.pid10bp.btrim.0.majority.cons.nuc.tally.xls
+	qsub -b y -j y -V -cwd -S /bin/bash -N compare_treatment_groups_Immun_12_1_12_vs_Mock_12_1_12_codon -o logs/ compare_variant_frequency.pl --label Immun_12_1_12,Mock_12_1_12 --keeptmp --save compare_Immun_12_1_12_vs_Mock_12_1_12_codon Sample_14.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_15.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_16.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls Sample_11.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_12.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls,Sample_13.contigs.pid10bp.btrim.0.majority.cons.codon.tally.xls
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
