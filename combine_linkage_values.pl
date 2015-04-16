@@ -46,7 +46,7 @@ use File::Spec;
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 
-my $save;
+my $save = Cwd::cwd();
 my $files;
 my $verbose;
 my $output;
@@ -67,7 +67,7 @@ GetOptions('save|s=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose,
 
 my $exe = basename($0);
 
-my $usage = "$exe <variants_linkage file 1> <variants_linkage file 2> ... 
+my $usage = "$exe <variants_linkage_file_1> [ <variants_linkage_file_2> ... ]
 variants_linkage files are the output of calculate_linkage_disequilibrium.  Each input file
 is a separate replicate.  Single replicate is fine too.  
 $exe takes variants linkage file from calculate_linkage_disequilibrium.pl and plots them in R.
@@ -134,6 +134,8 @@ OPTIONS:
 # Added File::Spec->rel2abs for output directory
 # 2015-03-23
 # Modified expected input file format to match output of calculate_linkage_disequilibrium.pl
+# 2015-04-16
+# Fixed a bug where $save is passed to File::Spec even if it doesn't exist.  Made default for $save to be Cwd::cwd().
 
 unless($ARGV[0]){
 	print STDERR $usage;
