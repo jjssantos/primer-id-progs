@@ -38,11 +38,12 @@ rm_if_exists($gap_start_length_during_merge_stats_file);
 map {chomp $_; grep_file_for('^(Many reads|Fraction of reads|Most common|Using)', $_, $gap_start_length_during_merge_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;
 
 
-# Retention based on primerID group size thresholds (also see group plots)
+# Retention based on primerID group size thresholds (also see group plots) and ambiguous characters outside of the gap region
 my $merge_primerID_retention_stats_file = dirify($output_dir,'merge_primerID_retention_stats.txt');
 rm_if_exists($merge_primerID_retention_stats_file);
 # for i in logs/merge_primerid_groups_*.o*; do echo $i; head -50 $i | grep "primerID groups "; done > merge_primerID_retention_stats.txt
-map {chomp $_; grep_file_for('primerID groups', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;
+#map {chomp $_; grep_file_for('primerID groups', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;
+map {chomp $_; grep_file_for('(primerID groups|Consensus reads) ', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;	 # Andrew
 
 
 # Retention in conversion to amino acid (tossed based on early stop codons)
