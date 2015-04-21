@@ -893,7 +893,7 @@ sub make_consensus {
 	&elapsed($start_time, 'Elapsed', $verbose);
 	my $ambig_count = scalar(@ambiguous) || 0;
 	my $good_count = scalar(@good) || 0;
-	printf STDERR "Consensus reads not reported with > $ambig non-gap ambiguities (or N consensus base outside gap): %2d (%.3f)\n", $ambig_count, $ambig_count/($ambig_count + $good_count) if ($ambig_count);
+	printf STDERR "Consensus reads not reported with > $ambig non-gap ambiguities: %2d (%.3f)\n", $ambig_count, $ambig_count/($ambig_count + $good_count) if ($ambig_count);
 	printf STDERR "Consensus reads reported: %2d (%.3f)\n", $good_count, $good_count/($ambig_count + $good_count) if($good_count);
 
 	# Save the results
