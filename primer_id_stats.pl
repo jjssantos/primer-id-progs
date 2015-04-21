@@ -6,9 +6,16 @@ use Getopt::Long;
 #use lib::helper_funcs;
 
 my $output_dir = '';
-GetOptions('output_dir=s'=>\$output_dir) or die ("Error in command line arguments\n");
+my $meta_file = '';
+my $SAMTOOLS = '/usr/local/bio_apps/samtools/samtools';
+
+GetOptions('output_dir=s'=>\$output_dir,
+	   'meta_file=s'=>\$meta_file
+	  ) or die ("Error in command line arguments\n");
 
 die "Please spec an output dir: --output_dir [dir_name]\nDying\n" if $output_dir eq '';
+die "Please spec meta file: --meta_file [file_name]\nDying\n" if $meta_file eq '';
+
 mkdir $output_dir unless (-d $output_dir);
 
 # Mapping and Gap size stats for R1 - R2 spacing (before merging)
@@ -51,15 +58,163 @@ rm_if_exists($convert_reads_good_tossed_stop_codons_stats_file);
 # for i in logs/convert_reads_to_amino_acid_*.o*; do echo -e "$i\t$(cat $i | grep "^Good")\t$(cat $i | grep "^Tossed")"; done > convert_reads_good_tossed_stop_codons_stats.txt
 map {chomp $_; grep_file_for('^Good|^Tossed', $_,$convert_reads_good_tossed_stop_codons_stats_file,1)} `ls logs/convert_reads_to_amino_acid.pl*`;
 
+
 # Retention after majority block filtering.
 my $majority_block_filtering_stats_file = dirify($output_dir,'majority_block_filtering_stats.txt');
 rm_if_exists($majority_block_filtering_stats_file);
+cat_into($majority_block_filtering_stats_file, "Sample\tRegion\tAll\tMajority\tAllBAM\tMajorityBAM\n");
+my $samples = hash_file($meta_file,0,3);
+get_majority_block_filtering_stats($samples,$majority_block_filtering_stats_file);
+
+# Linked Variant pairs with various threshold FDR values:
+my $summary_linked_variants_by_type_and_FDR_stats_file = dirify($output_dir,'summary_linked_variants_by_type_and_FDR_stats.txt');
+rm_if_exists($summary_linked_variants_by_type_and_FDR_stats_file);
+cat_into($summary_linked_variants_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
+map {chomp $_; do_summary_linked_variants($_,$summary_linked_variants_by_type_and_FDR_stats_file)} `ls outputs/calculate_linkage_disequilibrium.pl/*btrim.*linkage.minfreq0.0*.xls`;
+
+# Enriched variants in treatment vs. control with various FDR values:
+my $summary_compare_variants_treatment_control_by_type_and_FDR_stats_file = 'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt';
+rm_if_exists($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file);
+cat_into($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
+map {chomp $_; by_type_and_FDR_stats($_,$summary_compare_variants_treatment_control_by_type_and_FDR_stats_file)  } `ls outputs/compare_variant_freq_region_*/Passage_Parent.${type}.freq.pvalue.all.xls`;
+
+sub by_type_and_FDR_stats{
+
+# # Enriched variants in treatment vs. control with various FDR values:
+# out=summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt;
+#  echo "## Note: each threshold column represents variants *in addition to* the previous columns." > $out;
+#  for type in nuc aa codon;
+#  do for i in compare_variant_freq_region_*/Passage_Parent.${type}.freq.pvalue.all.xls;
+#  do if [ -e $i ];
+#  then ls $i;
+#  cat $i | grep -v "^name" | perl -se'my $hash;
+#  print "## Note: each threshold column represents variants in addition to the previous columns.\n";
+#   LINE: while(<>){ my @F = split(/\t/);
+#  $hash->{$a}->{'total'}++;
+#   foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){ if ($F[-1] < $t){ $hash->{$a}->{$t}++;
+#  next LINE;
+#  } } } print "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n";
+#  foreach my $type (qw(nuc codon aa)){ next unless (exists($hash->{$type}));
+#  print "$type";
+#  foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ my $c = $hash->{$type}->{$t} ? $hash->{$type}->{$t} : 0;
+#  print "\t$c";
+#  } print "\n";
+# }' -- -a=$type;
+#  fi;
+#  done;
+#  done >> $out
+
+    my $file = shift;
+    my $out = shift;
+    my %hash;
+    open IN,$file or die $!;
+    while(<IN>){
+	chomp $_;
+	next if $_ =~ /^#|^\s?$/;
+	next unless $_ =~ /^name/;
+	my @F = split(/\t/);
+	$hash{'total'}++;
+	foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){
+	    next unless ($F[-1] < $t);
+	    $hash{$t}++;
+	}
+    }
+    close IN;
+    cat_into($out,$file."\n");
+
+    print join "\t", keys %hash;
+    print "\n";
+    print join "\t", values %hash;
+    print "\n";
+
+    dump_n_n_total($out,\%hash);
+}
+# ' -- -a=$type;
+
+sub do_summary_linked_variants{
+
+# Linked Variant pairs with various threshold FDR values:
+# out=summary_linked_variants_by_type_and_FDR_stats.txt;
+#  echo "## Note: each threshold column represents variants *in addition to* the previous columns." > $out;
+#  for i in *btrim.*linkage.minfreq0.0*.xls;
+#  do if [ -e $i ];
+#  then ls $i;
+#  cat $i | grep -v "^#group" | perl -e'my $hash;
+#  LINE: while(<>){ my @F = split(/\t/);
+#  $hash->{'total'}->{$F[2]}++;
+#   foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){ if ($F[-1] < $t){ $hash->{$t}->{$F[2]}++;
+#  next LINE;
+#  } } } print "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n";
+#  foreach my $type (qw(nuc codon aa)){print "$type";
+#  foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ my $c = $hash->{$t}->{$type} ? $hash->{$t}->{$type} : 0;
+#  print "\t$c";
+#  } print "\n";
+# }' ;
+#  fi;
+#  done  >> $out
+    # the below is ~ cut and pasted from Andrew's code
+
+    my $file = shift;
+    my $out = shift;
+    my %hash;
+    open IN, $file or die $!;
+    while (<IN>){
+	next if $_ =~ /^#/;
+	my @F = split(/\t/);
+	$hash{'total'}->{$F[2]}++;
+  	foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){
+  	    next unless ($F[-1] < $t);
+	    $hash{$t}->{$F[2]}++;
+	}
+    }
+    close IN;
+    cat_into($out,$file."\n");
+    dump_n_n_total($out,\%hash);
+}
+
+sub dump_n_n_total{
+    # print "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n";
+    # foreach my $type (qw(nuc codon aa)){
+    # 	next unless (exists($hash->{$type}));
+    # 	print "$type";
+    # 	foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){
+    # 	    my $c = $hash->{$type}->{$t} ? $hash->{$type}->{$t} : 0;
+    # 	    print "\t$c";
+    # 	} 
+    # 	print "\n";
+    # }
+
+    my $file = shift;
+    my $hash = shift;
+    open OUT, ">>$file" or die $!;
+
+    print OUT "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n";
+    foreach my $type (qw(nuc codon aa)){
+  	print OUT "$type";
+  	foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ 
+  	    my $c = $hash->{$t}->{$type} ? $hash->{$t}->{$type} : 0;
+  	    print OUT "\t$c";
+  	} 
+  	print OUT "\n";
+    }
+    close OUT;
+}
+
+sub get_bam_file{
+    my $n = shift;
+    my $sample = shift;
+    my $type = shift;
+    return "Incorrect type" unless $type =~ /^all$|^maj$/;
+    my $fn = $type eq 'all' ? join '.',('outputs/get_majority_block_bam.pl/'.$sample,'contigs.pid.btrim.fastq',$n,'bam') : 
+      join '.',('outputs/get_majority_block_bam.pl/'.$sample,'contigs.pid.btrim',$n,'majority.bam');;
+    return $fn if (-e $fn);
+    warn "No such file $fn\n";
+    return 0;
+}
 
 sub get_majority_block_filtering_stats{
+    my $samples = shift;
     my $file = shift;
-    my $cat_into = shift;
-    
-# out=majority_block_filtering_stats.txt;
  # echo -e "Sample\tRegion\tAll\tMajority\tAllBAM\tMajorityBAM" > $out;
  # for n in 0 1 2;
  # do for s in 30_S1 31_S2 32_S3;
@@ -68,8 +223,48 @@ sub get_majority_block_filtering_stats{
  # echo -e "$s\t$n\t$(samtools view $allbam | wc)\t$(samtools view $majbam | wc)\t${allbam}\t${majbam}" >> $out;
  # done;
  # done 
+
+    for my $sample (keys %$samples){
+	for my $n (0, 1, 2){
+	    my $all_bam_file = get_bam_file($n,$sample,'all');
+	    next unless $all_bam_file;
+	    my $maj_bam_file = get_bam_file($n,$sample,'maj');
+	    my $phrase = join "\t",($sample, $n, samtools_view_wc($all_bam_file), samtools_view_wc($maj_bam_file), $all_bam_file, $maj_bam_file);
+	    cat_into($file, $phrase."\n");
+	}
+    }
 }
 
+sub samtools_view_wc{
+    my $file = shift;
+    my $str = `$SAMTOOLS view $file | wc`;
+    chomp $str;
+    return $str;
+}
+    
+sub cat_into{
+    my $file = shift;
+    my $phrase = shift;
+    open IN, ">>$file" or die $!;
+    print IN $phrase;
+    close IN;
+}
+
+sub hash_file{
+    my $file = shift;
+    my $key_col = shift;
+    my $val_col = shift;
+    my %h;
+    open FILE, $file or die "Dying; at hash_file, file name : $file\n";
+    while (<FILE>){
+	next if $_ =~ /^#|^\s?$/;
+	chomp $_;
+	my @cols = split /\t/, $_;
+	$h{$cols[$key_col]} = $cols[$val_col];
+    }
+    close FILE or warn $!;
+    return \%h;
+}
 
 sub extract_btrim_stats{
     # for i in logs/Btrim*.o*; do echo $i; 
