@@ -8,7 +8,10 @@
 	# Auto-detected Gap start and size stats 
 		for i in logs/merge_primerid_groups_*.o*; do echo $i; cat $i | egrep "^(Many reads|Fraction of reads|Most common|Using)"; echo; done > gap_start_length_during_merge_stats.txt
 	# Retention based on primerID group size thresholds (also see group plots)
-		for i in logs/merge_primerid_groups_*.o*; do echo $i; head -50 $i | grep "primerID groups "; done > merge_primerID_retention_stats.txt
+		for i in logs/merge_primerid_groups_*.o*; do echo $i; head -50 $i | egrep "(primerID groups|Consensus reads) "; done > merge_primerID_retention_stats.txt
+**NEW**	# Plot position of ambiguous nucleotides in consensus reads
+		for i in logs/merge_primerid_groups_*.o*; do base=$(basename $i); table=${base%.*}.ambigpos.txt; cat $i | egrep -A 10000 "^#?Position" | grep -v "^Total time" | sed 's/^#//g' | awk '{if($3 ~ /GAP/){print $1"\t"$2"\tT"} else if($1 ~ /Position/){print $1"\t"$2"\tGap"} else {print $1"\t"$2"\tF" } }' > $table; done
+		for i in *ambigpos.txt; do ./graph_ambig_pos.R $i; done
 	# Retention in conversion to amino acid (tossed based on early stop codons)
 		# for i in logs/convert_reads_to_amino_acid_*.o*; do echo $i; head -50 $i | grep " reads:" | grep -v Location; done  > convert_reads_good_tossed_stop_codons_stats.txt
 		for i in logs/convert_reads_to_amino_acid_*.o*; do echo -e "$i\t$(cat $i | grep "^Good")\t$(cat $i | grep "^Tossed")"; done > convert_reads_good_tossed_stop_codons_stats.txt
