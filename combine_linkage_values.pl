@@ -353,7 +353,7 @@ sub calculate_quasi_cliques {
 	close ($attr_fh);
 
 #	print Dumper($alleles); exit;
-    
+    print "There are no edges, I cannot procede, dying now.\n" and exit if scalar keys %$edges == 0; # philip macmenamin
     # Read $edges and print out edges print out 'node_num' representing each node instead of the node name.     
 	foreach my $edge (keys %$edges){
 		my ($first, $second) = split(/:/, $edge);
