@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use File::Basename;
+
 #use lib::helper_funcs;
 
 my $output_dir = '';
@@ -49,8 +51,11 @@ map {chomp $_; grep_file_for('^(Many reads|Fraction of reads|Most common|Using)'
 my $merge_primerID_retention_stats_file = dirify($output_dir,'merge_primerID_retention_stats.txt');
 rm_if_exists($merge_primerID_retention_stats_file);
 # for i in logs/merge_primerid_groups_*.o*; do echo $i; head -50 $i | grep "primerID groups "; done > merge_primerID_retention_stats.txt
-#map {chomp $_; grep_file_for('primerID groups', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;
 map {chomp $_; grep_file_for('(primerID groups|Consensus reads) ', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;	 # Andrew
+
+
+# Plot position of ambiguous nucleotides in consensus reads
+map {chomp $_; plot_pos_ambig_nucs($_)}  `ls logs/merge_primerid_read_groups.pl*`;
 
 
 # Retention in conversion to amino acid (tossed based on early stop codons)
@@ -73,11 +78,61 @@ rm_if_exists($summary_linked_variants_by_type_and_FDR_stats_file);
 cat_into($summary_linked_variants_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
 map {chomp $_; do_summary_linked_variants($_,$summary_linked_variants_by_type_and_FDR_stats_file)} `ls outputs/calculate_linkage_disequilibrium.pl/*btrim.*linkage.minfreq0.0*.xls`;
 
-# Enriched variants in treatment vs. control with various FDR values:
-my $summary_compare_variants_treatment_control_by_type_and_FDR_stats_file = 'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt';
-rm_if_exists($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file);
-cat_into($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
-map {chomp $_; by_type_and_FDR_stats($_,$summary_compare_variants_treatment_control_by_type_and_FDR_stats_file)  } `ls outputs/compare_variant_freq_region_*/Passage_Parent.${type}.freq.pvalue.all.xls`;
+
+# # Enriched variants in treatment vs. control with various FDR values:
+# my $summary_compare_variants_treatment_control_by_type_and_FDR_stats_file = 'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt';
+# rm_if_exists($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file);
+# cat_into($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
+# map {chomp $_; by_type_and_FDR_stats($_,$summary_compare_variants_treatment_control_by_type_and_FDR_stats_file)  } `ls outputs/compare_variant_frequency.pl/Passage_Parent.*.freq.pvalue.all.xls`;
+
+
+sub plot_pos_ambig_nucs{
+# for i in logs/merge_primerid_groups_*.o*;
+#  do base=$(basename $i);
+#  table=${base%.*}.ambigpos.txt;
+#  cat $i | egrep -A 10000 "^#?Position" | grep -v "^Total time" | sed 's/^#//g' | awk '{if($3 ~ /GAP/)'{print $1"\t"$2"\tT"} else if($1 ~ /Position/){print $1"\t"$2"\tGap"} else {print $1"\t"$2"\tF" } }' > $table;
+# done
+# for i in *ambigpos.txt;
+#  do ./graph_ambig_pos.R $i;
+#  done
+
+    my $file = shift;
+    my $bn = basename($file);
+    my $i = 0;
+    open IN, $file or die $!, "Oops at plot_pos_ambig_nucs\n";
+    my @lines;
+    while (<IN>){
+	$i = 1 if (($_ =~ /#?Position/) && ($i ==0));
+	next unless $i;
+	last if $i > 10000;
+	$i++;
+	next unless $_ !~ /^Total time/;
+	push @lines, t_or_f($_);       
+    }
+
+    my $table_file = dirify($output_dir,$bn.'.ambigpos.txt');
+    open OUT, ">$table_file" or die $!;
+    print OUT join "\n", @lines;
+    close OUT;
+}
+
+sub t_or_f{
+    my $line = shift;
+    chomp $line;
+    $line =~ s/^#//g;
+    my @l = split /\t/,$line;
+    my @l_ret;
+    if ($l[2] && ($l[2] =~ /GAP/) ){
+     	@l_ret = ($l[0],$l[1],'T');
+    }
+    elsif($0 =~ /Position/){
+    	@l_ret = ($l[0],$l[1],'Gap')
+    }
+    else {
+    	@l_ret = ($l[0],$l[1],'F')
+    }
+    return join "\t",@l_ret;
+}
 
 sub by_type_and_FDR_stats{
 
