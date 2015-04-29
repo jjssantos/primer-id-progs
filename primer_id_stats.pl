@@ -79,11 +79,11 @@ cat_into($summary_linked_variants_by_type_and_FDR_stats_file, "## Note: each thr
 map {chomp $_; do_summary_linked_variants($_,$summary_linked_variants_by_type_and_FDR_stats_file)} `ls outputs/calculate_linkage_disequilibrium.pl/*btrim.*linkage.minfreq0.0*.xls`;
 
 
-# # Enriched variants in treatment vs. control with various FDR values:
-# my $summary_compare_variants_treatment_control_by_type_and_FDR_stats_file = 'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt';
-# rm_if_exists($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file);
-# cat_into($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
-# map {chomp $_; by_type_and_FDR_stats($_,$summary_compare_variants_treatment_control_by_type_and_FDR_stats_file)  } `ls outputs/compare_variant_frequency.pl/Passage_Parent.*.freq.pvalue.all.xls`;
+# Enriched variants in treatment vs. control with various FDR values:
+my $summary_compare_variants_treatment_control_by_type_and_FDR_stats_file = dirify($output_dir,'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt');
+rm_if_exists($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file);
+cat_into($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
+map {chomp $_; by_type_and_FDR_stats($_,$summary_compare_variants_treatment_control_by_type_and_FDR_stats_file)  } `ls outputs/compare_variant_frequency.pl/Passage_Parent.*.freq.pvalue.all.xls`;
 
 
 sub plot_pos_ambig_nucs{
