@@ -212,9 +212,9 @@ sub by_type_and_FDR_stats{
 	chomp $_;
 	next if $_ =~ /^name/;
 	my @F = split(/\t/);
+	next if $F[-1] eq 'NA';
 	$hash{'total'}->{$type}++;
 	foreach my $ci (0.0001, 0.001, 0.01, 0.05, 0.1){ # work through the confidence intervls
-	    next if $F[-1] eq 'NA';
 	    next unless ($F[-1] < $ci);
 	    $hash{$ci}->{$type}++;
 	}
