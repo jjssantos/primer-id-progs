@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use File::Basename;
+
 #use lib::helper_funcs;
 
 my $output_dir = '';
@@ -49,8 +51,11 @@ map {chomp $_; grep_file_for('^(Many reads|Fraction of reads|Most common|Using)'
 my $merge_primerID_retention_stats_file = dirify($output_dir,'merge_primerID_retention_stats.txt');
 rm_if_exists($merge_primerID_retention_stats_file);
 # for i in logs/merge_primerid_groups_*.o*; do echo $i; head -50 $i | grep "primerID groups "; done > merge_primerID_retention_stats.txt
-#map {chomp $_; grep_file_for('primerID groups', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;
 map {chomp $_; grep_file_for('(primerID groups|Consensus reads) ', $_,$merge_primerID_retention_stats_file)} `ls logs/merge_primerid_read_groups.pl.*`;	 # Andrew
+
+
+# Plot position of ambiguous nucleotides in consensus reads
+map {chomp $_; plot_pos_ambig_nucs($_)}  `ls logs/merge_primerid_read_groups.pl*`;
 
 
 # Retention in conversion to amino acid (tossed based on early stop codons)
@@ -67,17 +72,109 @@ cat_into($majority_block_filtering_stats_file, "Sample\tRegion\tAll\tMajority\tA
 my $samples = hash_file($meta_file,0,3);
 get_majority_block_filtering_stats($samples,$majority_block_filtering_stats_file);
 
+
 # Linked Variant pairs with various threshold FDR values:
 my $summary_linked_variants_by_type_and_FDR_stats_file = dirify($output_dir,'summary_linked_variants_by_type_and_FDR_stats.txt');
 rm_if_exists($summary_linked_variants_by_type_and_FDR_stats_file);
 cat_into($summary_linked_variants_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
 map {chomp $_; do_summary_linked_variants($_,$summary_linked_variants_by_type_and_FDR_stats_file)} `ls outputs/calculate_linkage_disequilibrium.pl/*btrim.*linkage.minfreq0.0*.xls`;
 
+
 # Enriched variants in treatment vs. control with various FDR values:
-my $summary_compare_variants_treatment_control_by_type_and_FDR_stats_file = 'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt';
-rm_if_exists($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file);
-cat_into($summary_compare_variants_treatment_control_by_type_and_FDR_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
-map {chomp $_; by_type_and_FDR_stats($_,$summary_compare_variants_treatment_control_by_type_and_FDR_stats_file)  } `ls outputs/compare_variant_freq_region_*/Passage_Parent.${type}.freq.pvalue.all.xls`;
+my $summary_stats_file = dirify($output_dir,'summary_compare_variants_treatment_control_by_type_and_FDR_stats.txt');
+rm_if_exists($summary_stats_file);
+cat_into($summary_stats_file, "## Note: each threshold column represents variants *in addition to* the previous columns.\n");
+
+foreach my $file(`ls outputs/compare_variant_frequency.pl/*.freq.pvalue.all.xls`){
+    chomp $file;
+    my $h = by_type_and_FDR_stats($file,get_type($file));
+    cat_into($summary_stats_file,$file."\n");
+    dump_n_n_total($summary_stats_file,$h,get_type($file))
+}
+
+sub get_pref{
+    my $file = shift;
+    my $pref;
+    if ($file =~ /(\w+)\.aa\./){
+    	$pref = $1;
+    }
+    elsif($file =~ /(\w+)\.nuc\./){
+	$pref = $1;
+    }
+    elsif($file =~ /(\w+)\.codon\./){
+	$pref = $1;
+    }
+    else {
+	die "No pref\n";
+    }
+    return $pref;
+}
+    
+sub get_type{
+    my $file = shift;
+    my $type;
+    if ($file =~ /\.aa\./){
+    	$type = 'aa';
+    }
+    elsif($file =~ /\.nuc\./){
+    	$type = 'nuc';
+    }
+    elsif($file =~ /\.codon\./){
+    	$type = 'codon';
+    }
+    else {
+	die "No type\n";
+    }
+    return $type;
+}
+
+sub plot_pos_ambig_nucs{
+# for i in logs/merge_primerid_groups_*.o*;
+#  do base=$(basename $i);
+#  table=${base%.*}.ambigpos.txt;
+#  cat $i | egrep -A 10000 "^#?Position" | grep -v "^Total time" | sed 's/^#//g' | awk '{if($3 ~ /GAP/)'{print $1"\t"$2"\tT"} else if($1 ~ /Position/){print $1"\t"$2"\tGap"} else {print $1"\t"$2"\tF" } }' > $table;
+# done
+# for i in *ambigpos.txt;
+#  do ./graph_ambig_pos.R $i;
+#  done
+
+    my $file = shift;
+    my $bn = basename($file);
+    my $i = 0;
+    open IN, $file or die $!, "Oops at plot_pos_ambig_nucs\n";
+    my @lines;
+    while (<IN>){
+	$i = 1 if (($_ =~ /#?Position/) && ($i ==0));
+	next unless $i;
+	last if $i > 10000;
+	$i++;
+	next unless $_ !~ /^Total time/;
+	push @lines, t_or_f($_);       
+    }
+
+    my $table_file = dirify($output_dir,$bn.'.ambigpos.txt');
+    open OUT, ">$table_file" or die $!;
+    print OUT join "\n", @lines;
+    close OUT;
+}
+
+sub t_or_f{
+    my $line = shift;
+    chomp $line;
+    $line =~ s/^#//g;
+    my @l = split /\t/,$line;
+    my @l_ret;
+    if ($l[2] && ($l[2] =~ /GAP/) ){
+     	@l_ret = ($l[0],$l[1],'T');
+    }
+    elsif($0 =~ /Position/){
+    	@l_ret = ($l[0],$l[1],'Gap')
+    }
+    else {
+    	@l_ret = ($l[0],$l[1],'F')
+    }
+    return join "\t",@l_ret;
+}
 
 sub by_type_and_FDR_stats{
 
@@ -106,29 +203,25 @@ sub by_type_and_FDR_stats{
 #  done >> $out
 
     my $file = shift;
-    my $out = shift;
+    my $type = shift;
+    die "No Type\n" unless $type;
+
     my %hash;
     open IN,$file or die $!;
     while(<IN>){
 	chomp $_;
-	next if $_ =~ /^#|^\s?$/;
-	next unless $_ =~ /^name/;
+	next if $_ =~ /^name/;
 	my @F = split(/\t/);
-	$hash{'total'}++;
-	foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.1){
-	    next unless ($F[-1] < $t);
-	    $hash{$t}++;
+	next if $F[-1] eq 'NA';
+	$hash{'total'}->{$type}++;
+	foreach my $ci (0.0001, 0.001, 0.01, 0.05, 0.1){ # work through the confidence intervls
+	    next unless ($F[-1] < $ci);
+	    $hash{$ci}->{$type}++;
 	}
+	#last;
     }
     close IN;
-    cat_into($out,$file."\n");
-
-    print join "\t", keys %hash;
-    print "\n";
-    print join "\t", values %hash;
-    print "\n";
-
-    dump_n_n_total($out,\%hash);
+    return \%hash;
 }
 # ' -- -a=$type;
 
@@ -187,18 +280,30 @@ sub dump_n_n_total{
 
     my $file = shift;
     my $hash = shift;
+    my $type_in = shift;
     open OUT, ">>$file" or die $!;
 
     print OUT "#Type\t<0.0001\t<0.001\t<0.01\t<0.05\t<0.10\ttotal\n";
-    foreach my $type (qw(nuc codon aa)){
-  	print OUT "$type";
-  	foreach my $t (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ 
-  	    my $c = $hash->{$t}->{$type} ? $hash->{$t}->{$type} : 0;
+    if ($type_in){
+	print OUT "$type_in";
+  	foreach my $ci (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ 
+  	    my $c = $hash->{$ci}->{$type_in} ? $hash->{$ci}->{$type_in} : 0;
   	    print OUT "\t$c";
   	} 
   	print OUT "\n";
     }
+    else{
+	foreach my $type (qw(nuc codon aa)){
+	    print OUT "$type";
+	    foreach my $ci (0.0001, 0.001, 0.01, 0.05, 0.10, 'total'){ 
+		my $c = $hash->{$ci}->{$type} ? $hash->{$ci}->{$type} : 0;
+		print OUT "\t$c";
+	    } 
+	    print OUT "\n";
+	}
+    }
     close OUT;
+    
 }
 
 sub get_bam_file{
