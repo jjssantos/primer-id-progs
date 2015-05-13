@@ -79,7 +79,8 @@ my $clustalw;
 my $plot_counts;
 my $tiebreaker;
 my $ref;
-GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'baseq=s' => \$baseq, 'mapq=s' => \$mapq, 'fasta=s' => \$fasta, 'debug' => \$debug, 'min_reads=s' => \$min_reads, 'm=s' => \$min_reads, 'max_reads=s' => \$max_reads, 'x=s' => \$max_reads, 'cpu=s' => \$cpu, 'p=s' => \$cpu, 'gap=s' => \$gap, 'g=s' => \$gap, 'R1_length=s' => \$R1_length, 'r=s' => \$R1_length, 'ambig=s' => \$ambig, 'n=s' => \$ambig, 'wide_gap' => \$wide_gap, 'clustalw' => \$clustalw, 'plot_counts' => \$plot_counts, 'tiebreaker' => \$tiebreaker, 't' => \$tiebreaker, 'ref=s' => \$ref);
+my $min_auto_gap_size = 3;
+GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'baseq=s' => \$baseq, 'mapq=s' => \$mapq, 'fasta=s' => \$fasta, 'debug' => \$debug, 'min_reads=s' => \$min_reads, 'm=s' => \$min_reads, 'max_reads=s' => \$max_reads, 'x=s' => \$max_reads, 'cpu=s' => \$cpu, 'p=s' => \$cpu, 'gap=s' => \$gap, 'g=s' => \$gap, 'R1_length=s' => \$R1_length, 'r=s' => \$R1_length, 'ambig=s' => \$ambig, 'n=s' => \$ambig, 'wide_gap' => \$wide_gap, 'clustalw' => \$clustalw, 'plot_counts' => \$plot_counts, 'tiebreaker' => \$tiebreaker, 't' => \$tiebreaker, 'ref=s' => \$ref, 'min_auto_gap_size=i' => \$min_auto_gap_size);
 
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
@@ -139,6 +140,9 @@ OPTIONS:
 		is smallest R1_length and end position is largest R1_length plus largest gap).  
 		The default is a more conservative gap with gap start position as the most common 
 		R1_length and gap end position as common R1_length plus most common gap size. 
+--min_auto_gap_size	When selecting --gap and --R1_length in 'auto' mode, this setting affects
+		the minimum gap size to use in the search.  Default = 3.  At least 20% of the reads
+		need to have a gap of this size in order for it to be considered a gap.
 --plot_counts	Make a graph of primerID group counts based on size of group (i.e., number
 		of reads with the same primerID).
 ";
@@ -215,7 +219,9 @@ OPTIONS:
 # Fixed a bug in the table of ambiguous positions where I was printing the line returns to STDOUT and the rest of the table to STDERR.  
 # 2014-10-14
 # Fixed a bug in read_fasta subroutine where the program was appending belowmin and abovemax reads to existing files. Now it checks if the file exists and deletes it first before writing any reads.
-
+# 2015-05-13
+# Added --min_auto_gap_size option.  Default = 3.
+# Changed name of output ambig.fasta file to remove the threshold number of ambig positions
 
 unless ($files||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
@@ -397,7 +403,7 @@ sub find_gap {
 	my %gap_positions;	# Save the gap positions
 	my $total = 0; 		# Total number of reads processed so far.
 
-	my $min_auto_gap_size = 3;
+#	my $min_auto_gap_size = 1;  # parameterized this.  Default will be 3.
 
 	my $in  = Bio::SeqIO->new(-file => "$fasta" ,		
                            -format => 'Fasta');			# http://search.cpan.org/~cjfields/BioPerl-1.6.922/Bio/SeqIO.pm
@@ -412,7 +418,7 @@ sub find_gap {
 		if ($apparent_long_gap_count < $number_to_check){		# Count all reads, or until 1000 reads are found with a gap.  Could do more if desired.  
 			if ($seq =~ m/(N+)/i){
 				my $length = length($1); 
-				if ($length >= $min_auto_gap_size){		# Long gap set arbitrarily as 3xN.  Could be parameterized... $min_auto_gap_size
+				if ($length >= $min_auto_gap_size){		# Long gap set arbitrarily as 3xN.  Could be parameterized... $min_auto_gap_size .  changed default to 1xN.  May want to parameterize it and then set default back to 3 to avoid random Ns in low-quality sequence, for example.  Yes, I will do it.
 					$apparent_long_gap_count++;
 					$gap_sizes{$length}++;
 					my $pos = $-[0];	# Index.  (In 1-based, this would be just before the first N)
@@ -649,7 +655,7 @@ sub make_consensus {
 	# Prepare output files
 	my ($bam_prefix,$dir,$ext) = fileparse($bam_file,@suffixes);
 	my $out_file_good  = $save_dir . "/" . $bam_prefix . '.cons.fasta'; 
-	my $out_file_ambig = $save_dir . "/" . $bam_prefix . '.ambig.' . $ambig . '.fasta';
+	my $out_file_ambig = $save_dir . "/" . $bam_prefix . '.ambig.fasta';
 
 	my @middle = ($R1_length + 1, $R1_length + $gap); 	# Start and stop of the internal gap, basically.  If no gap, then these should both be zero.  These are 1-based coordinates of the gap positions, inclusive.  (check with a file that has no gap...)
 	
