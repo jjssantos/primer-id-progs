@@ -23,7 +23,7 @@ use Bio::AlignIO;
 use Bio::SimpleAlign;
 use Bio::SeqIO;
 use File::Temp;
-
+use Parallel::Loops;
 
 # Andrew J. Oler, PhD
 # Computational Biology Section
@@ -73,13 +73,15 @@ OPTIONS:
 -n/--number	Number of Ns to use in concatenation. Default = 0.
 -r/--ref	Single fasta file containing reference sequence to use to decide a custom 
 	number of Ns to insert in concatenation.  R1 and R2 reads will be aligned to the 
-	reference with clustalw	and the internal gap size will be determined.   This is 
-	recommended for long read lengths, e.g., MiSeq with 250bp reads. 
+	reference with clustalw	or bwa mem and the internal gap size will be determined.   
+	This is recommended for long read lengths, e.g., MiSeq with 250bp reads. If bwa mem is 
+	used for alignment (default), this file should first be indexed using command 
+	'bwa index <file>'.
 -b/--buffer	Number of bases up and down of the end of the first read to look for the 
 	gap between reads with respect to reference.  Only required if --ref specified.  
 	Default = 20.  This should be at least twice the expected gap size.  
 -w/--clustalw	Use ClustalW alignment with reference sequence to determine gap size. 
-	Default is to use bwa mem.  Using ClustalW is about 3-4x slower.  Requires --ref.
+	Default is to use bwa mem.  Using ClustalW is about 20-25x slower.  Requires --ref.
 -p/--cpu	Number of processors to use.  Default = 1. Determines the number of threads 
 	to use for bwa if --ref is supplied.  
 -c/--char	Character to use for concatenation.  Default = N.  
@@ -117,16 +119,25 @@ concatenate_fastq.pl -o Sample_5.concat.fastq -r Seq12_093009_HA_cds.fa --cpu 14
 # Added table of gap lengths
 # 2015-03-18
 # Added basename to temporary output files to avoid collisions in case no output directory is specified
+# 2015-05-14
+# Set default for primerID length in get_custom_number_Ns_clustalw to 12 instead of 10
+# Put the Parallel Loop for clustalw in a separate subroutine and made it run in parallel. It will now be done and saved as a hash of id-> gap length just like the bwa subroutine.
+# Added a step to check the reference sequence for a gap (i.e., insertion in the read), and save this as a negative gap. 
+# Also counting insertion values from cigar string when running bwa as negative gap values in the table output to screen.  Treating it as zero-gap in the output fastq file for now though.
+# Added $count to file name because tempdir is reusing the same random string.  
+# Check first whether bwa index exists before running bwa index.  -- Actually, reference should be indexed before running.  Exits with a warning if sam file is empty.  
 
 # To do
-# Make a distribution graph of insert sizes when using --ref. 
+# Make a distribution graph of insert sizes and/or gap sizes when using --ref.   Gap sizes are already in a table so maybe not gap sizes.  
 # Test MAFFT to see if we can speed it up even further compared to Clustalw 
 # Make clustalw-specific modules (e.g., Bioperl Run) optional using eval.
-# Put the Parallel Loop for clustalw in a separate subroutine.  Right now it's not running in parallel. 
-# Maybe make an option to remove any sequences that don't align to the reference...
+# # Maybe make an option to remove any sequences that don't align to the reference...
 # Add a script before this one the check whether reads of a pair overlap or not; if so, send to pandaseq, if not, run in concatenate_fastq.pl
-# Check first whether bwa index exists before running bwa index
 # Maybe change default output directory to something other than Cwd?
+# Parameterize primerID length in get_custom_number_Ns_clustalw, instead of using 10 (or 12) as default.  Maybe also parameterize the expected gap length.  Or make the default buffer size large enough...
+# Maybe change iterator() sub so that it saves them as an array in the first place, so no need to split later.  
+# Find a way to deal with *insertions* (when no gap, but seems to be an insertion.  Maybe trim off some of the read before concatenating...? 
+
 
 unless ($ARGV[1]){	print STDERR "$usage\n";	exit;	}
 my $start_time = time;
@@ -146,21 +157,36 @@ if ($ref && $clustalw){
 					if ($verbose){	print "refseq: $refseq\n";	}
 }
 
-# Run BWA to get gap sizes if reference sequence file is supplied.
+# Run BWA or clustalw to get gap sizes if reference sequence file is supplied.
 my $id_to_gap_hash;		# hashref with keys as fastq id and value is the gap size to insert between R1 and R2.  Determined from CIGAR string in alignment with bwa mem.
 if ($ref){
-	unless($clustalw){
+	if($clustalw){
+		# Use clustalw to align each of the reads to reference and save gap size in hash
+		$id_to_gap_hash = pass_seqs_to_clustalw($ARGV[0],$ARGV[1], $refseq, $buffer);
+	}
+	else {
+		# Use BWA to align all of the reads and save gap sizes as determined from CIGAR string.  
 		if (check_for_bwa() ){		# check_for_bwa() sub will return 1 if bwa mem is not found; will also print an appropriate error message.
 			exit 1;
 		}	
 		else {
-			print STDERR "Found bwa mem.\n";
+			print STDERR "Found bwa mem. Aligning reads to $ref\n";
 			$id_to_gap_hash = get_gaps_with_bwa($ref, $ARGV[0], $ARGV[1], $buffer);
 		}	
 	}
+	# Now print out counts for gap sizes.  
+	my $gap_sizes; # hashref with keys as gap sizes
+	foreach my $gap (values %$id_to_gap_hash){
+		$gap_sizes->{$gap}++;
+	}
+	print STDERR "Gap_size\tCount\n";
+	for my $gap (sort {$gap_sizes->{$b} <=> $gap_sizes->{$a}} keys %$gap_sizes){
+		print STDERR "$gap\t$gap_sizes->{$gap}\n";
+	}
+	print STDERR "Note: negative gap values are treated as 0.\n";
 }
 
-						# print Dumper($id_to_gap_hash);	exit;
+				# print Dumper($id_to_gap_hash);	exit;
 
 # Set up output file
 unless ($output){
@@ -221,15 +247,11 @@ while( $entry = $fastq_iterator->()){
 	my $second_quals 	= reverse($fastq2[3]);  # Reverse quality scores.  
 	
 	if ($ref){
-		if ($clustalw){
-			$number = get_custom_number_Ns_clustalw($refseq, $first->seq() , $second->seq(), $buffer);
-		}
-		else {
-			my $id = $ids[0];		# Need just the first part of the id, because that is how the hash keys were saved, e.g., @MISEQ:50:000000000-A4142:1:1101:17205:1539 . Also remove the @ 
-			$id =~ s/^@//;
-			$number = $id_to_gap_hash->{$id}; 
-						# print "id: $id number: $number\n\n-->$id_to_gap_hash->{$id}\n"; exit;
-		}
+		my $id = $ids[0];		# Need just the first part of the id, because that is how the hash keys were saved, e.g., @MISEQ:50:000000000-A4142:1:1101:17205:1539 . Also remove the @ 
+		$id =~ s/^@//;
+		$number = $id_to_gap_hash->{$id}; 
+		$number = 0 if ($number < 0);	# insertions are counted as negative values.  Maybe we should use them to trim some of the read off...?  For now just treat it as if there were no gap. 
+					# print "id: $id number: $number\n\n-->$id_to_gap_hash->{$id}\n"; exit;
 	}
 
 	my $new_fastq = $first->id() . "\n" . $first->seq() . "$char"x$number . $second->seq() . "\n" . '+' . "\n" . $first_quals . '$'x$number .  $second_quals . "\n";		# Use '$' as low quality for gap between R1 and R2, (quality 3.  Was '#', quality 2.)
@@ -248,6 +270,75 @@ close($writefh);
 #---------------------------------- SUBS -------------------------------------
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
+sub pass_seqs_to_clustalw {
+	# Takes the two input fastq files and reads them simultaneously and passes two reads at a time to clustalw, then save the gap sizes to a hash.
+	
+	my ($fastq1, $fastq2, $refseq, $buffer) = @_;
+	
+	open (my $FH1 , '<' , $ARGV[0]) || die $!;
+	open (my $FH2 , '<' , $ARGV[1]) || die $!;
+
+	my $fastq_iterator = iterator($FH1);
+	my $fastq_iterator_2 = iterator($FH2);
+
+	print STDERR "Processing aligning reads to reference with clustalw to determine gap size for each pair of reads.\n";
+
+	my $count = 0;		# Keep a count of progress.  Need to increment this in the first sub.  
+
+	my $entry 	= "";
+	my $entry2	= "";
+
+	# Start Parallel loop here...
+	
+	my %id_to_gap_hash; 	# hashref to store id -> gap hash.  Make this a shared hash.  
+	
+	my $pl = Parallel::Loops->new($cpu);
+	$pl->share(\%id_to_gap_hash);
+	 
+	$pl->while( sub { $entry = $fastq_iterator->(); $entry2 = $fastq_iterator_2->(); $count++; defined($entry); },		sub {				
+
+	
+		if ($count % 1000 == 0){
+			print STDERR "Processed $count reads. "; 
+			&elapsed($start_time, 'Elapsed', $verbose);
+		}
+			
+	#	print "record $count\nread1:\n$entry\nread2:\n$entry2\n";
+		my @fastq = split(/\n/, $entry);
+		my @fastq2 = split(/\n/, $entry2);		# About 225,000 records per second before doing this step.  # Adding this conversion to an array brings speed to about 130,000 records per second
+	
+		# Check that the ids match.  
+		my @ids = split(/\s+/, $fastq[0]);		# e.g., split this:  @MISEQ:50:000000000-A4142:1:1101:17205:1539 1:N:0:ACCACCTT
+	#	my @ids2 = split(/\s+/, $fastq2[0]);
+	# 	die "Read ids do not match! Exiting...\n" unless ($ids[0] eq $ids2[0]);		# Adding this check to all reads brings speed to about 100,000 records per second.  Just checking every 1000th read to save time (to see if the files became out of sync at a certain point), it runs at 110,000 records per second.  Just check all reads in that case -- it doesn't take much more time.
+
+		my $first 	= Bio::Seq->new( -seq => $fastq[1], 	-id => $fastq[0], );
+		my $second 	= Bio::Seq->new( -seq => $fastq2[1], 	-id => $fastq[0], );
+		$second 	= $second->revcom();		# Seq object, Reverse complement 
+	
+		my $first_quals		= $fastq[3];
+		my $second_quals 	= reverse($fastq2[3]);  # Reverse quality scores.  
+	
+		$number = get_custom_number_Ns_clustalw($refseq, $first->seq() , $second->seq(), $buffer, $count);
+
+#		my $new_fastq = $first->id() . "\n" . $first->seq() . "$char"x$number . $second->seq() . "\n" . '+' . "\n" . $first_quals . '$'x$number .  $second_quals . "\n";		# Use '$' as low quality for gap between R1 and R2, (quality 3.  Was '#', quality 2.)
+#		print $writefh "$new_fastq";
+	
+		my $id = $ids[0];		# Need just the first part of the id, because that is how the hash keys were saved, e.g., @MISEQ:50:000000000-A4142:1:1101:17205:1539 . Also remove the @ 
+		$id =~ s/^@//;
+		$id_to_gap_hash{$id} = $number;
+	
+	}
+	);		## End of Parallel Loop;
+
+
+	close($FH1);
+	close($FH2);
+	
+	return (\%id_to_gap_hash);
+	
+}
+#-----------------------------------------------------------------------------
 sub iterator{
 	my $file_handle = shift // die $!;
 	return sub{
@@ -264,7 +355,7 @@ sub get_custom_number_Ns_clustalw {
 		# Reference sequence, First sequence, second sequence, buffer
 	# Concatenates reads with no Ns, makes a temporary fasta file, aligns concatenated read to reference with clustalw, then gets the region that should correspond to the gap between the reads and looks for the largest gap.   
 		
-	my ($refseq,$first,$second,$buffer) = @_;
+	my ($refseq,$first,$second,$buffer,$count) = @_;
 	
 	my $read_length = length($first);
 	
@@ -275,7 +366,7 @@ sub get_custom_number_Ns_clustalw {
 	
 	# Create temporary fasta file
 	my $cwd = Cwd::cwd();
-	my $tempdir = File::Temp->newdir(  "$cwd/fasta_file_tempXXXXX" );
+	my $tempdir = File::Temp->newdir( "$cwd/fasta_".$count."_tempXXXXXX" );	# was "$cwd/fasta_file_tempXXXXX" 
 	my $temp_fasta = $tempdir."/temp.fa";
 	my $fh = open_to_write($temp_fasta, 0, 0, 1);
 	print $fh ">ref\n$refseq\n>read\n$concat\n";
@@ -287,8 +378,8 @@ sub get_custom_number_Ns_clustalw {
 		
 	
 	# Get a slice of the alignment near the gap
-	my $primerID_length = 10;
-	my $col = $aln->column_from_residue_number("read", $primerID_length) - $primerID_length;		 # Look for the position of the 10th read residue within the alignment and then subtract 10.  Just in case some of the first bases align to an early region of the reference, especially if the first 10 bases are a random primerID, so they could align to anything.
+	my $primerID_length = 12;
+	my $col = $aln->column_from_residue_number("read", $primerID_length) - $primerID_length;		 # Effective postion of beginning of read in the alignment.  Look for the position of the 12th read residue within the alignment and then subtract 12.  Just in case some of the first bases align to an early region of the reference, especially if the first 12 bases are a random primerID, so they could align to anything.
 						if ($verbose){	print STDERR "col: $col\n";	}
 	my $slice = $aln->slice($col + $read_length - $buffer, $col + $read_length + $buffer + 10);		# If buffer is 20, then go 20 bp upstream and 30 bp downstream of the end of the R1 read.  The extra 10 is based on the expected gap size.  Maybe it should be command-line option....
 						if ($verbose){	
@@ -302,17 +393,34 @@ sub get_custom_number_Ns_clustalw {
 					if ($verbose){	print STDERR "read: $aln_read_seq\n";	}
 
 	# Look for largest gap.  Gap could be '-' or '.' character.
-	my $gap_length = 0;
-	while($aln_read_seq =~ m/([\-\.]+)/g){		# Looking for consecutive '-' or '.' characters.
-		if (length($1)>$gap_length){
-			$gap_length = length($1);				
-		}
+	my $gap_length = get_gap_size($aln_read_seq);
+	
+	# If gap_length is 0, get the reference sequence and look for a gap there -- maybe there is an insertion in the read
+	if ($gap_length == 0){
+		# Get ref sequence
+		my $aln_ref_seq = $seqs[0]->seq();		# Works.  Needs to have reference first and read second.  
+					if ($verbose){	print STDERR "ref: $aln_ref_seq\n";	}
+		# Look for largest gap.  Gap could be '-' or '.' character.
+		$gap_length = -1 * get_gap_size($aln_ref_seq);		# If gap found in reference, that would be an insertion in the read, so count this as a "negative" gap.  
 	}
+	
 					if ($verbose){	print STDERR "gap length: $gap_length\n";	}
 	return $gap_length;	
 }
 #-----------------------------------------------------------------------------
- sub check_for_bwa {
+sub get_gap_size {
+	# Takes a sequence and looks for the largest sequence of '-' or '.' characters
+	my $seq = shift;
+	my $gap_length = 0;  # Default gap size is zero
+	while($seq =~ m/([\-\.]+)/g){		# Looking for consecutive '-' or '.' characters.
+		if (length($1)>$gap_length){
+			$gap_length = length($1);			
+		}
+	}	
+	return $gap_length;
+}
+#-----------------------------------------------------------------------------
+sub check_for_bwa {
 	# Check for bwa mem on the PATH.
 	# Returns 0 if successful, 1 if an error occurs.
      my $pwd = pwd_for_hpc();
@@ -411,12 +519,17 @@ sub get_gaps_with_bwa{
 					#	system("cat $tempdir/bwa_mem_out.txt");
 					#	system("wc $temp_sam");
 	
+	# Check to see whether sam file is non-empty.  If no bwa index is present, sam file will be empty.  
+	unless (-s $temp_sam){
+		print STDERR "SAM file empty.  Please check to see if your reference $ref has been indexed with bwa index.\n";
+		exit 1;
+	}
+	
 	#### Now parse the sam file to get id and cigar string and save gaps between reads
 	print STDERR "Alignment done, parsing output.";  &elapsed($start_time, ' Elapsed', $verbose);
 	my $samfh = open_to_read($temp_sam);
 	my $unmapped = 0;
 	my $mapped = 0; 
-	my $gap_sizes; 	#Hashref of gap size counts
 	while(<$samfh>){ 
 		chomp; 
 		my @F = split(/\t/); 
@@ -444,7 +557,6 @@ sub get_gaps_with_bwa{
 			 	if($cigar->[$i]->[0] eq 'D'){
 						#	print "id: $F[0]\tsum: $sum\tmatch: $cigar->[$i]->[1]\n";
 					$id_to_gap_hash->{$id} = $cigar->[$i]->[1]; # store the size of the gap.  Positive value for gap.  
-					$gap_sizes->{$cigar->[$i]->[1]}++;
 					$stored++;
 					last CIGAR;		#?  Is there ever insertion and deletion??
 				}
@@ -464,7 +576,6 @@ sub get_gaps_with_bwa{
 		}
 		unless ($stored){
 			$id_to_gap_hash->{$id} = 0;		# If there was no D cigar element in the expected location, then there is no gap in the read, so assign a zero gap.  (actually, there might actually be overlap between these reads... I've found that sometimes there is a gap in the reference with these reads)
-			$gap_sizes->{0}++;
 		}
 	}
 	close($samfh);
@@ -472,13 +583,8 @@ sub get_gaps_with_bwa{
 	print STDERR "$unmapped\treads not mapped to the reference sequence.\n" if ($unmapped);
 	&elapsed($start_time, ' Elapsed', $verbose);
 	
-	# Now print out counts for gap sizes.  
-	print STDERR "Gap_size\tCount\n";
-	for my $gap (sort {$gap_sizes->{$b} <=> $gap_sizes->{$a}} keys %$gap_sizes){
-		print STDERR "$gap\t$gap_sizes->{$gap}\n";
-	}
 
-	return $id_to_gap_hash;
+	return ($id_to_gap_hash);
 }
 #-----------------------------------------------------------------------------
 
