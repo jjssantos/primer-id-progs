@@ -509,8 +509,7 @@ sub find_gap {
 sub read_fasta {
 	
 	# Next, group the reads by primerID (in the header) and then return this as a data structure.  
-	# During the process of reading the files, we will also auto-detect the gap sizes and average starting position of the gap
-	
+		
 	my $fasta = shift;
 	
 	my $read_tally; 	# HoHoA.  First key is primerID, second key is 'sequence', value is array of sequences for alignment.  
