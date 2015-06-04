@@ -235,6 +235,7 @@ Notes:
 # It is recommended that all reads begin with the same starting position.  For now, the script assumes there is one gene per chromosome and genes must be on the positive strand (e.g., viral genomes).  
 # (Amino acid * usually results from deletions filled in with base X.).  
 
+
 unless ($ref && ($files||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
 	if (scalar(@ARGV)>1){	#This will allow you to use wildcard to pass files to the script from the command line. e.g, script.pl *.txt, and it will run through each.
@@ -293,14 +294,18 @@ my %converter = (		# Modified from http://www.wellho.net/resources/ex.php4?item=
     'TCN' => 'S', # Serine wobble
     'TTC' => 'F', # Phenylalanine
     'TTT' => 'F', # Phenylalanine
+    'TTY' => 'F', # Phenylalanine ambiguous C or T
     'TTA' => 'L', # Leucine
     'TTG' => 'L', # Leucine
+    'TTR' => 'L', # Leucine ambiguous A or G
     'TAC' => 'Y', # Tyrosine
     'TAT' => 'Y', # Tyrosine
+    'TAY' => 'Y', # Tyrosine ambiguous C or T
     'TAA' => '*', # Stop
     'TAG' => '*', # Stop
     'TGC' => 'C', # Cysteine
     'TGT' => 'C', # Cysteine
+    'TGY' => 'C', # Cysteine ambiguous C or T
     'TGA' => '*', # Stop (or Selenocysteine, U)
     'TGG' => 'W', # Tryptophan
     'CTA' => 'L', # Leucine
@@ -315,8 +320,10 @@ my %converter = (		# Modified from http://www.wellho.net/resources/ex.php4?item=
     'CCN' => 'P', # Proline wobble
     'CAC' => 'H', # Histidine
     'CAT' => 'H', # Histidine
+    'CAY' => 'H', # Histidine ambiguous C or T
     'CAA' => 'Q', # Glutamine
     'CAG' => 'Q', # Glutamine
+    'CAR' => 'Q', # Glutamine ambiguous A or G
     'CGA' => 'R', # Arginine
     'CGC' => 'R', # Arginine
     'CGG' => 'R', # Arginine
@@ -325,6 +332,10 @@ my %converter = (		# Modified from http://www.wellho.net/resources/ex.php4?item=
     'ATA' => 'I', # Isoleucine
     'ATC' => 'I', # Isoleucine
     'ATT' => 'I', # Isoleucine
+    'ATH' => 'I', # Isoleucine ambiguous A or C or T
+    'ATM' => 'I', # Isoleucine ambiguous A or C
+    'ATW' => 'I', # Isoleucine ambiguous A or T
+    'ATY' => 'I', # Isoleucine ambiguous C or T
     'ATG' => 'M', # Methionine
     'ACA' => 'T', # Threonine
     'ACC' => 'T', # Threonine
@@ -333,12 +344,16 @@ my %converter = (		# Modified from http://www.wellho.net/resources/ex.php4?item=
     'ACN' => 'T', # Threonine wobble
     'AAC' => 'N', # Asparagine
     'AAT' => 'N', # Asparagine
+    'AAY' => 'N', # Asparagine ambiguous C or T
     'AAA' => 'K', # Lysine
     'AAG' => 'K', # Lysine
+    'AAR' => 'K', # Lysine ambiguous A or G
     'AGC' => 'S', # Serine
     'AGT' => 'S', # Serine
+    'AGY' => 'S', # Serine ambiguous C or T
     'AGA' => 'R', # Arginine
     'AGG' => 'R', # Arginine
+    'AGR' => 'R', # Arginine ambiguous A or G
     'GTA' => 'V', # Valine
     'GTC' => 'V', # Valine
     'GTG' => 'V', # Valine
@@ -351,14 +366,27 @@ my %converter = (		# Modified from http://www.wellho.net/resources/ex.php4?item=
     'GCN' => 'A', # Alanine wobble
     'GAC' => 'D', # Aspartic Acid
     'GAT' => 'D', # Aspartic Acid
+    'GAY' => 'D', # Aspartic Acid ambiguous C or T
     'GAA' => 'E', # Glutamic Acid
     'GAG' => 'E', # Glutamic Acid
+    'GAR' => 'E', # Glutamic Acid ambigous A or G
     'GGA' => 'G', # Glycine
     'GGC' => 'G', # Glycine
     'GGG' => 'G', # Glycine
     'GGT' => 'G', # Glycine
     'GGN' => 'G', # Glycine wobble
     );
+# Add constituent ambiguous characters in place of N as well.  
+my @iupac_ambig_nuc = (qw(R Y S W K M B D H V));	# http://www.bioinformatics.org/sms/iupac.html
+foreach my $codon (keys %converter){
+	if ($codon =~ m/N$/){
+		foreach my $ambig (@iupac_ambig_nuc){
+			my $new_codon = $codon;
+			$new_codon =~ s/N$/$ambig/;	# Replace N for the ambiguous nucleotide
+			$converter{$new_codon} = $converter{$codon};	# Assign the amino acid value to the same aa as the codon ending in N
+		}
+	}
+}
 
 # Parse GFF file to get start and stop, and translated ORF
 my $genes;
