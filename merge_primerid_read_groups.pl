@@ -636,8 +636,9 @@ sub plot_counts {
 	my $R = Statistics::R->new();		# http://search.cpan.org/~fangly/Statistics-R-0.31/lib/Statistics/R.pm
 	my $out1 = $R->run(
 		"table <- read.delim(\"$group_count_file\")",
+		"ymax <- min(max(table\$Fraction_of_groups) * 1.25,1)",		# In plot, change ylim to lesser value of (max Fraction_of_groups * 1.25 or 1) in case all values are ~0.2 or 0.1 (ymax of 1 is too high in that case so the plot doesn't look good)
 		"pdf(\"$group_count_graph\")",
-		"barplot(table\$Fraction_of_groups, names.arg=table\$Reads_in_PrimerID_group, ylim=c(0,1.0), ylab=\"Fraction of PrimerID Groups\", xlab=\"PrimerID Group Size (Number of Reads)\", main=\"PrimerID Group Size Distribution for $fasta_prefix\", cex.main=0.9)",
+		"barplot(table\$Fraction_of_groups, names.arg=table\$Reads_in_PrimerID_group, ylim=c(0,ymax), ylab=\"Fraction of PrimerID Groups\", xlab=\"PrimerID Group Size (Number of Reads)\", main=\"PrimerID Group Size Distribution for $fasta_prefix\", cex.main=0.9)",
 #		"library(ggplot2)",
 #		"ggplot(table, aes(x = Reads_in_PrimerID_group, y = Fraction_of_groups)) + geom_bar(stat = \"identity\")",		# Testing, so that I can add labels above the bars for the actual numbers
 		"dev.off()"
