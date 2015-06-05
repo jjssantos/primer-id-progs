@@ -150,7 +150,7 @@ if ($keeptmp){
 	$tempdir = File::Temp->newdir( $template, DIR => $save_dir, CLEANUP => 0 );		# CLEANUP => 0 so it will not be deleted 
 }
 else {
-	$tempdir = File::Temp->newdir( 	$template  );		# CLEANUP => 1 by default so it will be deleted when out of scope
+	$tempdir = File::Temp->newdir( 	$template, DIR => $save_dir  );		# CLEANUP => 1 by default so it will be deleted when out of scope
 }
 
 
