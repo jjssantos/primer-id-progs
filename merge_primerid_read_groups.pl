@@ -79,7 +79,7 @@ my $clustalw;
 my $plot_counts;
 my $tiebreaker;
 my $ref;
-my $min_auto_gap_size = 3;
+my $min_auto_gap_size = 1;
 GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'baseq=s' => \$baseq, 'mapq=s' => \$mapq, 'fasta=s' => \$fasta, 'debug' => \$debug, 'min_reads=s' => \$min_reads, 'm=s' => \$min_reads, 'max_reads=s' => \$max_reads, 'x=s' => \$max_reads, 'cpu=s' => \$cpu, 'p=s' => \$cpu, 'gap=s' => \$gap, 'g=s' => \$gap, 'R1_length=s' => \$R1_length, 'r=s' => \$R1_length, 'ambig=s' => \$ambig, 'n=s' => \$ambig, 'wide_gap' => \$wide_gap, 'clustalw' => \$clustalw, 'plot_counts' => \$plot_counts, 'tiebreaker' => \$tiebreaker, 't' => \$tiebreaker, 'ref=s' => \$ref, 'min_auto_gap_size=i' => \$min_auto_gap_size);
 
 #-----------------------------------------------------------------------------
@@ -141,7 +141,7 @@ OPTIONS:
 		The default is a more conservative gap with gap start position as the most common 
 		R1_length and gap end position as common R1_length plus most common gap size. 
 --min_auto_gap_size	When selecting --gap and --R1_length in 'auto' mode, this setting affects
-		the minimum gap size to use in the search.  Default = 3.  At least 20% of the reads
+		the minimum gap size to use in the search.  Default = 1.  At least 20% of the reads
 		need to have a gap of this size in order for it to be considered a gap.
 --plot_counts	Make a graph of primerID group counts based on size of group (i.e., number
 		of reads with the same primerID).
