@@ -93,6 +93,8 @@ OPTIONS:
 # Created script.  Borrowed code from MpileupFrequency.pl for statistical analysis 
 # 2014-09-08
 # Changed File::Temp::tempdir call to File::Temp::newdir to be compatible with File::Temp 0.23.  See http://www.dagolden.com/index.php/2109/why-the-latest-filetemp-might-surprise-you/
+# 2015-06-05
+# Fixed merge_samples to use the labels in case no replicates were provided.  The main issue is if both samples were run through convert_reads_to_amino_acid without supplying the --label option, both samples will have Sample_1 as Sample id, so no comparisons can be made in Fishers test. Fix that by substituting Sample_1 for label provided in --label.  
 
 # To do
 # When merging replicates, check for a change in the consensus based on the new frequencies and change the consensus accordingly.  
@@ -181,7 +183,9 @@ else {
 
 
 ## Now take the merged replicate files and make one merged file for the statistical analysis in R.
-my $merged_both_samples = merge_samples($merged_sample1_file,$merged_sample2_file);
+my $merged_both_samples = merge_samples($merged_sample1_file,$merged_sample2_file, $labels[0], $labels[1]);
+print STDERR "Merged file with both samples: $merged_both_samples\n";
+
 
 ## Now run the statistical analysis on the merged file
 run_fisher_test($merged_both_samples);
@@ -347,11 +351,37 @@ sub merge_samples {
 	# For our current purposes, we can just concatenate the files, actually.
 	# In the future, I'll probably want to compute a few extra columns, e.g., Ref, Nonref, SumResidues (like SumACGT), numNonzeroResidues (like numNonzeroACGT).
 	# Or, we could compute these extra columns up above.
-	my @files = @_;
+	my ($file1, $file2, $label1, $label2) = @_;
 	
-	my $labels_for_filename = join "_", @labels;
-	my $merged_filename = $tempdir . "/Merged_" . $labels_for_filename . ".tally.xls";
-	system("cat $files[0] > $merged_filename; cat $files[1] | grep -v \"coverageDepth\" >> $merged_filename"); 
+	my $labels_for_filename = join "_", $label1, $label2;
+	my $merged_filename = $save_dir . "/Merged_" . $labels_for_filename . ".tally.xls";
+	
+	# Initialize output file and print out header
+	my $merged_file_fh = open_to_write($merged_filename);
+	my @header = get_header($file1);
+	$header[0] =~ s/^#//;	# remove '#' character for R header
+	print $merged_file_fh join "\t", @header;
+	print $merged_file_fh "\n";
+	
+	my @files = ($file1, $file2);
+	my @labels = ($label1, $label2);
+	for (my $i = 0; $i < @files; $i++){
+		my $header = column_header_lookup_hash($file1);
+		my $sample_index = $header->{"Sample"};		# column index for Sample
+		my $readfh = open_to_read($files[$i]);
+		while(<$readfh>){
+			my @F = split(/\t/);
+			next if (m/coverageDepth/);	# skip header row
+			unless ($F[$sample_index] && $F[$sample_index] eq $labels[$i]){
+				# Sample label doesn't exist or doesn't match the input sample label, replace it with the input sample label
+				$F[$sample_index] = $labels[$i];
+			}
+			print $merged_file_fh join "\t", @F;	
+		}
+		close ($readfh);
+	}
+	close ($merged_file_fh);
+		
 	return $merged_filename;
 }
 #-----------------------------------------------------------------------------
@@ -394,7 +424,7 @@ sub run_fisher_test {
 		@array = qw(A C D E F G H I K L M N P Q R S T V W Y .);	# stop codon symbol * is converted to '.' by read.delim in R.  'num*' becomes 'num.'.  'num-' becomes 'num..1' in R.
 	}
 	else {
-		print STDERR "Type not found!\n";
+		print STDERR "Type not found: $type!\n";
 		exit;
 	}
 	$col_names = join "\",\"num", @array;
@@ -410,7 +440,7 @@ fisherbyresidue <- function(d, min=50){
 	print $scriptfh "col.names = c($col_names);\n";		# Need to make applicable to amino acid too. All num columns except num*	numX	num-	numOther for aa.  For nuc, all num except numN	numOther.  Problem is that numN is valid in aa.  
 	print $scriptfh 'check=apply(d[,col.names],2,max)
 	num=length(check[check!=0])
-	if (all(sum(d[,col.names]) >= min) && (num > 1)) {		
+	if (all(sum(d[,col.names]) >= min) && (num > 1) && (nrow(d[,col.names]) > 1)) {		
 		temp <- fisher.test(d[,col.names], simulate.p.value=T, B=100000);
 		p.value = temp$p.value;
 	}
@@ -419,6 +449,13 @@ fisherbyresidue <- function(d, min=50){
 '."\n";
 
 	print $scriptfh "data = read.delim(\"$merged_file\",fill=TRUE,header=TRUE,sep=\"\\t\",stringsAsFactors=FALSE)\n";
+	print $scriptfh "print(\"Sample table:\")\n";
+	print $scriptfh "print(table(data\$Sample))\n";
+	print $scriptfh "nsamples <- nrow(table(data\$Sample))\n";
+	print $scriptfh "if (nsamples < 2){\n";
+	print $scriptfh "  stop(\"Only one sample found so no comparisons can be made. Quitting...\")\n";
+	print $scriptfh "}\n\n";	
+	
 	print $scriptfh 'data.list = split(data,data[,1])'."\n";
 	print $scriptfh 'y=unlist(lapply(data.list,fisherbyresidue))'."\n";
 	print $scriptfh 'data.sample.list = split(data,data$Sample)'."\n";
@@ -455,13 +492,20 @@ fisherbyresidue <- function(d, min=50){
 	print $scriptfh "for (name in names(pos.list)) { print(name); pdf(paste(\"$tempdir\", \"/\", name, \"_xy.pdf\", sep=\"\")); plot(pos.list[[name]]\$$header[2], pos.list[[name]]\$transf.p.value, main=paste(name, \"base\", \"changes\"), xlab=\"Position\", ylab=\"-10*log(adj.p.value)\", cex=0.5); text(pos.list[[name]]\$$header[2], pos.list[[name]]\$transf.p.value, pos.list[[name]]\$$header[2], pos=4, cex=0.4); dev.off()}\n";
 	close ($scriptfh);
 
-	my $output = `Rscript $temp_script`;
+	#my $output = `Rscript $temp_script`;
+	my $output = system("Rscript $temp_script");
 	
-	# Merge graphs with gs. 
-		#One potential problem with this is that if gs is not on the system, individual pdfs will be deleted because they are in the temp directory.   To avoid deleting them, use --keeptmp
-	system("gs -q -dBATCH -dNOPAUSE -dAutoRotatePages#/None -sDEVICE=pdfwrite -sOutputFile=$save_dir/$labels_for_filename"."_genes_dot.pdf $tempdir/*_dot.pdf");
-	system("gs -q -dBATCH -dNOPAUSE -dAutoRotatePages#/None -sDEVICE=pdfwrite -sOutputFile=$save_dir/$labels_for_filename"."_genes_xy.pdf $tempdir/*_xy.pdf");
-
+	#print STDERR "Rscript output: \n$output\n";
+	
+	# Merge graphs with gs if no exit code from Rscript
+	if($output){
+		print STDERR "R script $temp_script exited with code " , $output / 256, "\n";
+	}	
+	else {
+			#One potential problem with this is that if gs is not on the system, individual pdfs will be deleted because they are in the temp directory.   To avoid deleting them, use --keeptmp
+		system("gs -q -dBATCH -dNOPAUSE -dAutoRotatePages#/None -sDEVICE=pdfwrite -sOutputFile=$save_dir/$labels_for_filename"."_genes_dot.pdf $tempdir/*_dot.pdf");
+		system("gs -q -dBATCH -dNOPAUSE -dAutoRotatePages#/None -sDEVICE=pdfwrite -sOutputFile=$save_dir/$labels_for_filename"."_genes_xy.pdf $tempdir/*_xy.pdf");
+	}
 
 	
 }
