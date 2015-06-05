@@ -34,6 +34,7 @@ our @EXPORT = qw(
 	elapsed
 	get_file_num
 	get_header
+	column_header_lookup_hash
 	bin_hash_of_values
 	trim
 	plot_venn
@@ -928,6 +929,32 @@ sub get_header {
 	}	
 	close($readfh);
 	return @array;
+}
+#-------------------------------------------------------------------------------
+sub column_header_lookup_hash {
+	# Takes a file or an arrayref as argument
+	# Returns a hashref for you to be able to lookup the index of a column header 
+	# For example, headers (chr, start, end), hash would look like this:
+	# %hash = (
+	#	'chr' 	=> 0,
+	#	'start' => 1,
+	#	'end' 	=> 2,
+	# );
+	# Takes a file, returns a hashref
+	# Each column header should be unique
+	# Column headers should be tab-delimited
+	
+	#my $file = shift;
+	#my @header = get_header($file);
+	my $input = shift;	# Either a file or an array ref.  
+	my @header = 	ref($input) ? @$input : get_header($input);
+	
+	my $hash;
+	for (my $i = 0; $i < @header; $i++){
+		my $col_header = $header[$i];
+		$hash->{$col_header} = $i;		# Maybe add something here to check if that already exists so not to overwrite an earlier stored value.  
+	}	
+	return $hash;	
 }
 #-------------------------------------------------------------------------------
 sub trim {
