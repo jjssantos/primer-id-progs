@@ -563,7 +563,7 @@ sub get_gaps_with_bwa{
 				elsif($cigar->[$i]->[0] eq 'I'){
 					# somehow store the position to delete the overlap region.  
 					# Negative value for insertion.  
-					$id_to_gap_hash->{$id} = -1 * $cigar->[$i]->[1]; # store the size of the gap.  Negative value for an insertion.   (Does this work???)
+					$id_to_gap_hash->{$id} = -1 * $cigar->[$i]->[1]; # store the size of the gap.  Negative value for an insertion.   (Does this work??? Yes, it works)
 					$stored++;
 					last CIGAR;		#? Unless sometimes insertion and deletion??
 				}
@@ -579,8 +579,8 @@ sub get_gaps_with_bwa{
 		}
 	}
 	close($samfh);
-	print STDERR "$mapped\treads mapped to the reference sequence.\n" if ($mapped);
-	print STDERR "$unmapped\treads not mapped to the reference sequence.\n" if ($unmapped);
+	printf STDERR "%2d\treads mapped to the reference sequence (%.3f).\n", $mapped, $mapped/($mapped + $unmapped) if ($mapped);
+	printf STDERR "%2d\treads not mapped to the reference sequence (%.3f).\n", $unmapped, $unmapped/($mapped + $unmapped) if ($unmapped);
 	&elapsed($start_time, ' Elapsed', $verbose);
 	
 
