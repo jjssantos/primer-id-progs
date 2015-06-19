@@ -85,6 +85,10 @@ e.g., filter_fastq_by_primerid_length.pl --pre GC --post AAGCAGT --file_in myfil
 
 # 2015-04-16
 # Updated usage to match Philip's changes.
+# 2015-06-19
+# Updated plot_counts so that we are plotting numbers and fractions of reads instead of primerID groups. Also made the y-axis fit the data better.
+
+
 
 
 die $usage unless ($n);
@@ -238,7 +242,9 @@ sub plot_counts {
 	my $count_fh = open_to_write($group_count_file);
 	print $count_fh "PrimerID_group_size\tNumber_of_reads\tFraction_of_reads\n";
 	foreach my $group_size (sort {$a <=> $b} keys %$counts){
-		printf $count_fh "%2d\t%2d\t%.3f\n", $group_size, $counts->{$group_size}, $counts->{$group_size} / $total_reads;
+		my $number_of_reads = $counts->{$group_size};
+		$number_of_reads = $number_of_reads * $group_size if ($group_size > 0);
+		printf $count_fh "%2d\t%2d\t%.3f\n", $group_size, $number_of_reads, $number_of_reads / $total_reads;
 	}
 	close ($count_fh);
 
@@ -246,8 +252,9 @@ sub plot_counts {
 	my $R = Statistics::R->new();		# http://search.cpan.org/~fangly/Statistics-R-0.31/lib/Statistics/R.pm
 	my $out1 = $R->run(
 		"table <- read.delim(\"$group_count_file\")",
+		"ymax <- min(max(table\$Fraction_of_reads) * 1.25,1)",		# In plot, change ylim to lesser value of (max Fraction_of_reads * 1.25 or 1) in case all values are ~0.2 or 0.1 (ymax of 1 is too high in that case so the plot doesn't look good)
 		"pdf(\"$group_count_graph\")",
-		"barplot(table\$Fraction_of_reads, names.arg=table\$PrimerID_group_size, ylim=c(0,1.0), ylab=\"Fraction of Reads\", xlab=\"PrimerID Group Size (Number of Reads)\", main=\"Read Distribution by PrimerID Group for $newfilebase\", cex.main=0.9)",
+		"barplot(table\$Fraction_of_reads, names.arg=table\$PrimerID_group_size, ylim=c(0,ymax), ylab=\"Fraction of Reads\", xlab=\"PrimerID Group Size (Number of Reads)\", main=\"Read Distribution by PrimerID Group for $newfilebase\", cex.main=0.9)",
 #		"library(ggplot2)",
 #		"ggplot(table, aes(x = Reads_in_PrimerID_group, y = Fraction_of_groups)) + geom_bar(stat = \"identity\")",		# Testing, so that I can add labels above the bars for the actual numbers
 		"dev.off()"
