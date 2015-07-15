@@ -105,7 +105,7 @@ foreach my $file (@files){
 
 # Print out the table.
 my $writefh = 
-	($output) ? open_to_read($output) :
+	($output) ? open_to_write($output) :
 		*STDOUT;
 
 print $writefh join "\t", "sample", "name", "position", "coverageDepth", "numNonConsensus", "merged";
