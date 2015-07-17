@@ -64,7 +64,7 @@ my $title = $filename;
 $title =~ s/\.cov\w+$//i;
 my $pdf = $options{output_dir} . "/" . $filename . '.pdf'; 
 
-print $scriptfh "tally = read.delim(\"$coverage_file\", header=FALSE)\n";
+print $scriptfh "tally = read.delim(\"$coverage_file\", header=FALSE, na.strings=\"NULL\")\n";
 print $scriptfh "names = as.character(unique(tally\$V1))\n";
 print $scriptfh "pdf(\"$pdf\")\n";
 print $scriptfh "for (i in names) {\n";
