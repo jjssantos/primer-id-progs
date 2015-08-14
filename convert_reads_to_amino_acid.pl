@@ -666,7 +666,7 @@ sub read_input_reads {
 
 			# Save nucleotide information in local hash
 			#*** check the format we need for individual and merged tables.  In report, I need a hashref of this format: $nuc_aa_codon_tally->{'nuc'}->{$nuc_pos}->{$nuc} = count;  For now, I'll make an array of these: {'nuc'/'aa'/'codon'}->{$pos}->{$nuc/$aa/$codon} = count
-			$seq_info->{'nuc'}->{$read_nuc_pos} = uc($read_res); 
+			$seq_info->{'nuc'}->{$read_nuc_pos} = uc($read_res) unless ($read_res =~ m/$gap_char/);  # Added  unless ($read_res =~ m/$gap_char/) 
 
 			$full_read_nuc .= $read_res;
 			$read_codon = $read_codon . $read_res 	 unless ($read_res =~ m/$gap_char/);
