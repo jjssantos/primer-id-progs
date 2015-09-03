@@ -234,6 +234,10 @@ Notes:
 # Edited usage statement.  Removed this:
 # It is recommended that all reads begin with the same starting position.  For now, the script assumes there is one gene per chromosome and genes must be on the positive strand (e.g., viral genomes).  
 # (Amino acid * usually results from deletions filled in with base X.).  
+# 2015-08-14
+# Fixed a bug in read_input_reads where it was updating the nucleotide for a position even if it was a gap character.  See https://github.niaid.nih.gov/macmenaminpe/primer-id-progs/issues/9
+# Also modify read_input_reads so that all indel-containing consensus reads are tossed (at least for now).  Put in @toss array.  
+
 
 
 unless ($ref && ($files||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
@@ -647,7 +651,7 @@ sub read_input_reads {
 			}
 
 			# Get nucleotide positions for this base
-			$ref_nuc_pos++ unless ($ref_res =~ m/$gap_char/);		# Is this always the same value as $ref_aligned->location_from_column($aln_pos);
+			$ref_nuc_pos++ unless ($ref_res =~ m/$gap_char/);		# Is this always the same value as $ref_aligned->location_from_column($aln_pos);	# Moving this down to 
 			my $read_nuc_pos = $ref_nuc_pos - $frameshift;			# This is the position for storing the nucleotide in the local hash.  **Is this working?  In all situations, including frameshifts that are resolved a few codons later?
 						
 			# Check if we have reached the first full codon yet or if we are still in an initial partial codon
@@ -666,7 +670,7 @@ sub read_input_reads {
 
 			# Save nucleotide information in local hash
 			#*** check the format we need for individual and merged tables.  In report, I need a hashref of this format: $nuc_aa_codon_tally->{'nuc'}->{$nuc_pos}->{$nuc} = count;  For now, I'll make an array of these: {'nuc'/'aa'/'codon'}->{$pos}->{$nuc/$aa/$codon} = count
-			$seq_info->{'nuc'}->{$read_nuc_pos} = uc($read_res) unless ($read_res =~ m/$gap_char/);  # Added  unless ($read_res =~ m/$gap_char/) 
+			$seq_info->{'nuc'}->{$read_nuc_pos} = uc($read_res) unless ($read_res =~ m/$gap_char/);  # If gap character, don't save the nucleotide to the tally because the read_nuc_pos is unchanged, so it would overwrite whatever is there at that position. 
 
 			$full_read_nuc .= $read_res;
 			$read_codon = $read_codon . $read_res 	 unless ($read_res =~ m/$gap_char/);
@@ -728,7 +732,7 @@ sub read_input_reads {
 			}
 			
 			# Check for premature stop codons due to frameshift
-			if ( ($read_aa =~ m/^\*$/) && $out_of_frame ){		# Stop codon found when frameshift is present.  Mark the read to be tossed
+			if ( $out_of_frame ){		# Stop codon found when frameshift is present.  Mark the read to be tossed.  # 2015-08-14.  Modifying so that ALL frameshifts lead to tossing the read.  Was:  if ( ($read_aa =~ m/^\*$/) && $out_of_frame ){
 				$toss = 1;
 							if ($verbose){	print STDERR "Premature stop in a frameshift region!\nFull nuc seq (so far): $full_read_nuc\nFull aa seq (so far): $full_read_aa\ncodon:$read_codon\n";		}
 			}
@@ -811,6 +815,9 @@ sub read_input_reads {
 			foreach my $pos (@pos){
 				my $base_codon_aa = $seq_info->{$type}->{$pos};
 				$nuc_aa_codon_tally->{$type}->{$pos}->{$base_codon_aa} += $seq_count;
+#										if ($pos =~ /527/ && $type eq 'nuc' && $seq_info->{$type}->{$pos} eq 'G'){
+#											print Dumper($seq_info->{'full_seqs'});
+#										}
 			}
 			# Print out the full sequences		[Are these printing out properly?  What about sequences with insertions in the read?  Should they be removed?]
 			# Do I need to print out the individual reads that are identical?  If so, do I need the original primerid in the name?  
@@ -854,7 +861,9 @@ sub read_input_reads {
 	}
 	
 
-	
+#	print Dumper($nuc_aa_codon_tally->{'nuc'}->{'527'});
+#	print Dumper($nuc_aa_codon_tally->{'nuc'}->{'531'});
+#	exit;
 	
 	return $nuc_aa_codon_tally;
 	

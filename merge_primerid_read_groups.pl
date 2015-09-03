@@ -80,7 +80,31 @@ my $plot_counts;
 my $tiebreaker;
 my $ref;
 my $min_auto_gap_size = 1;
-GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'baseq=s' => \$baseq, 'mapq=s' => \$mapq, 'fasta=s' => \$fasta, 'debug' => \$debug, 'min_reads=s' => \$min_reads, 'm=s' => \$min_reads, 'max_reads=s' => \$max_reads, 'x=s' => \$max_reads, 'cpu=s' => \$cpu, 'p=s' => \$cpu, 'gap=s' => \$gap, 'g=s' => \$gap, 'R1_length=s' => \$R1_length, 'r=s' => \$R1_length, 'ambig=s' => \$ambig, 'n=s' => \$ambig, 'wide_gap' => \$wide_gap, 'clustalw' => \$clustalw, 'plot_counts' => \$plot_counts, 'tiebreaker' => \$tiebreaker, 't' => \$tiebreaker, 'ref=s' => \$ref, 'min_auto_gap_size=i' => \$min_auto_gap_size);
+my $min_freq = "";
+GetOptions(
+	'save=s' => \$save, 
+	'output=s' => \$output, 
+	'verbose' => \$verbose, 
+	'files=s' => \$files, 
+	'gzip' => \$gzip, 
+	'baseq=s' => \$baseq, 
+	'mapq=s' => \$mapq, 
+	'fasta=s' => \$fasta, 
+	'debug' => \$debug, 
+	'min_reads|m=s' => \$min_reads, 
+	'max_reads|x=s' => \$max_reads, 
+	'cpu|p=s' => \$cpu, 
+	'gap|g=s' => \$gap, 
+	'R1_length|r=s' => \$R1_length, 
+	'ambig|n=s' => \$ambig, 
+	'wide_gap' => \$wide_gap, 
+	'clustalw' => \$clustalw, 
+	'plot_counts' => \$plot_counts, 
+	'tiebreaker|t' => \$tiebreaker, 
+	'ref=s' => \$ref, 
+	'min_auto_gap_size=i' => \$min_auto_gap_size, 
+	'min_freq=s' => \$min_freq,
+);
 
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
@@ -145,6 +169,10 @@ OPTIONS:
 		need to have a gap of this size in order for it to be considered a gap.
 --plot_counts	Make a graph of primerID group counts based on size of group (i.e., number
 		of reads with the same primerID).
+--min_freq	When calling a consensus base for a particular position, the frequency of the 
+		major base should be equal to or higher than this value.  If the value falls below
+		this threshold, the assigned base is N.  The default is to take the major base 
+		regardless of the frequency.  Suggested: value between 0.60 and 0.75.  
 ";
 
 # To Do:
@@ -777,7 +805,7 @@ sub make_consensus {
 			}		
 			my ($max_key_value) = find_key_with_biggest_value(\%count,2,1);	# returns arrayref of results, including ties
 #								if($verbose){	if (scalar(keys %count)>1){	my $top = find_key_with_biggest_value(\%count); printf "Pos: %2d  Res: %s  Count: %2d\n", $pos, $top, $count{$top};	}	}
-			my $res = $max_key_value->[0]->[0]; 	# If there is a clear winner, this will work.  Note that this can sometimes be an N, which we need to check.  
+			my $res = ""; 
 			if (scalar(@$max_key_value) > 1){
 				# Then there is an ambiguous base because it couldn't be decided on a winner
 				$ambig_pos->{$res_num}=$max_key_value;		# Store the AoA of residue counts, to keep track of residue position
@@ -815,6 +843,17 @@ sub make_consensus {
 	#				$ambig_summary_for_fasta_header_def .= " " . $res_num . uc($res);	# add the position and resulting ambiguous character to the fasta header.  Do below instead...
 				}
 			}
+			else {	
+				# Then there is a clear majority for one base.  
+				$res = $max_key_value->[0]->[0]; 	# If there is a clear winner, this will work.  Note that this can sometimes be an N, which we need to check.  		
+				
+				# Also check frequency.  By default, a basic "majority rule" is in effect.  This is an additional filter that will require that the frequency for the majority is above a certain threshold, e.g., 2/3
+				my $max_freq = $max_key_value->[0]->[1] / total(values %count);
+				if ($min_freq && $max_freq < $min_freq){
+					$res = "N"; 	# assign ambiguous
+				}
+			}
+			
 			
 			unless($res){	
 				# Then something's wrong  
