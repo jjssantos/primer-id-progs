@@ -48,7 +48,7 @@ die "failed to copy files properly $ref,$fastq\n".$! unless ((-e $ref) && (-e $f
 die unless -e $SORTSAMJAR;
 
 # Align with bwa mem
-my $bwaopts="-t $p -M";
+my $bwaopts="-t $p -M -B 1";
 my $tmp_sam = $fastq.'.sam.gz';
 system "$BWA mem $bwaopts $ref $fastq | gzip > $tmp_sam";
 
