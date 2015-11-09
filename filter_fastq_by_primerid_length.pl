@@ -25,7 +25,8 @@ my $primerid_min = 1;
 my $removepost;
 my $n; 				# philip
 my $file ='';			# philip
-my $output_dir = '';
+my $output_dir = './';	# default.
+my $r2 = '';
 
 GetOptions("n=i"=>\$n,
 	   "output_dir=s"=>\$output_dir,
@@ -35,19 +36,23 @@ GetOptions("n=i"=>\$n,
 	   'primerid_min=s' => \$primerid_min, 
 	   'removepost' => \$removepost, 
 	   "file_in=s" => \$file,
+	   'r2=s' => \$r2,
 	   );
 
 my $usage= basename($0)." looks for a primerID or barcode of a defined length in 
 the 5' end of a read.  If found, the primerID is trimmed and placed in the seqid in the 
-output fastq file.  Input fastq file must be unzipped.  It processes about 750 reads per 
+output fastq file.  Input fastq file(s) must be unzipped.  It processes about 750 reads per 
 second.
 filter_fastq_by_primerid_length.pl [OPTIONS] --file_in <fastq> --n <size> --post <seq>
 OPTIONS:
---file_in	Input fastq file.  Required.
+--file_in	Input fastq file.  Single-end fastq file, or R1 of paired-end fastq file. 
+	Required.  
+--r2	Input fastq file.  R2 of paired-end fastq file.  Optional.  If provided, the 
+	primerID sequence will be added to the header of this file as well.
 --n     Size of primerID.  Required.
 --post	Sequence following the primerID.  Default, any sequence. 
 	Required!  Otherwise, the length of the primerID is meaningless.
---output_dir	Output directory to save the files.
+--output_dir	Output directory to save the files. Default current directory.
 --pre	Sequence preceding the primerID.  Default, no sequence before primerID (i.e., 
 	primerID starts at extreme 5' end).
 --removepost	Remove the \"post\" sequence in addition to the primerID.  Default is to keep the 
@@ -87,7 +92,8 @@ e.g., filter_fastq_by_primerid_length.pl --pre GC --post AAGCAGT --file_in myfil
 # Updated usage to match Philip's changes.
 # 2015-06-19
 # Updated plot_counts so that we are plotting numbers and fractions of reads instead of primerID groups. Also made the y-axis fit the data better.
-
+# 2015-11-06
+# Added --r2 option.  
 
 
 
@@ -97,15 +103,23 @@ unless ($post){
 	warn "Please enter value for --post.\n";
 	exit 1;
 }
+unless ($output_dir){
+	warn "Please enter an output directory.\n";
+	exit 1;
+}
+
+mkdir $output_dir unless(-e $output_dir);
+
+
+if ($r2 && $stdout){
+	print STDERR "Can't use --stdout with paired-end fastq files.  Will write output for R1 and R2 to separate files.\n";
+}
 
 my $start_time = time;
 
-#my ($filename,$dir,$ext) = fileparse($ARGV[0],@SUFFIXES);		# fileparse($file,qr/\.[^.]*/);
-my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);		# fileparse($file,qr/\.[^.]*/);
-$dir = $output_dir;# unless $output_dir eq '';			# philip
-#my $newfilebase = $filename.'.pid'.$n.'bp';
-my $newfilebase = $dir.$filename.'.pid'; # philip
-my $newfilename = $newfilebase.$ext;
+$output_dir .= "/" unless ($output_dir =~ m/\/$/);	# Add '/' to the end of the directory name if it doesn't exist already.
+
+my $newfilename = get_new_filename($file);
 
 my $in=Bio::SeqIO->new(-format => 'fastq', 
 	-variant => 'sanger', 
@@ -124,15 +138,31 @@ if ($stdout){
 	);
 }
 
+# Set up FASTQ reader and output file for R2
+my $r2_in;
+my $r2_out;
+if ($r2){
+	my $r2_newfilename = get_new_filename($r2);
+	$r2_in=Bio::SeqIO->new(-format => 'fastq', 
+		-variant => 'sanger', 
+		-file => $r2,
+		); 
+	$r2_out = Bio::SeqIO->new(-format => 'fastq',
+		-file => ">$r2_newfilename",
+		);
+}
+
 my $count = 0;
 my $primerid_tally;
 my $i = 0;
 my $with_primerID = 0;
 my $no_primerID = 0;
 while(my $seq = $in->next_seq){
+	my $r2_seq = $r2_in->next_seq if $r2;
 	if ($seq->seq =~ m/^$pre([ACTG]{$n})($post)([ACTGN]+)$/){ 
 		my $length = length($seq->seq);
 		$seq->id($seq->id .':'."$1");	# Add the primerid to the id.  This is important for the script merge_primerid_read_groups.pl
+		$r2_seq->id($r2_seq->id .':'."$1") if $r2;	# Add the primerid to the id for the R2 read as well, if R2 file provided.  No other modifications required for R2 read (i.e., no trimming)
 		my $new_seq;
 		my $start = 1;
 		if ($removepost){
@@ -162,6 +192,7 @@ while(my $seq = $in->next_seq){
 		print STDERR "not flush\n" unless ($seq->quality_is_flush);
 #					print "length of seq: ".length($seq->seq)." supposed length of qual: ".scalar(@subqual)." length of qual: ".scalar(@{$seq->qual})."\n";
 		$out->write_fastq($seq);		# Print out the fastq record
+		$r2_out->write_fastq($r2_seq) if $r2;	# Print out the fastq record for R2 as well (if R2 file provided)
 		$primerid_tally->{$1}->{tally}++;
 		push @{$primerid_tally->{$1}->{list}}, $seq->id;
 		$with_primerID++;
@@ -190,13 +221,14 @@ foreach my $num (sort {$a <=> $b} keys %$counts){
 	print STDERR "$num\t$counts->{$num}\n";
 }
 
-plot_counts($newfilebase, $counts);		# commented out for now.  
+my ($filename,$dir,$ext) = fileparse($newfilename,@SUFFIXES);
+plot_counts($filename, $counts);		
 
 printf STDERR "\n%i sequences with primerID\t\t%.3f", $with_primerID, $with_primerID/$i;
 printf STDERR "\n%i sequences without primerID\t\t%.3f\n", $no_primerID, $no_primerID/$i;
 
 # Now print out the primer IDs with the individual counts and the read ids for each.  
-my $primerID_filename = $dir.$filename.'.pid.primerids';
+my $primerID_filename = $output_dir.$filename.'.pid.primerids';
 my $writefh = open_to_write($primerID_filename, 1);			# gzip compression for second argument
 foreach my $ID (keys %$primerid_tally){
 	print $writefh "$ID\t";
@@ -261,3 +293,38 @@ sub plot_counts {
 	);
 	
 }
+#-----------------------------------------------------------------------------
+sub get_new_filename {
+	# This subroutine takes a file as input.
+	# 1. Parses out the basename, extension
+	# 2. Adds '.pid'
+	# 3. Shifts R1/R2 to the end of the file name (if it exists)
+	# 4. Adds new output directory and adds back extension
+	# 5. Returns the new filename
+	my $file = shift;
+
+	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);		# fileparse($file,qr/\.[^.]*/);
+	
+	$filename .= '.pid';
+	
+	if ($filename =~ m/(_R[12])\.?/){		# -f 24_S1_R1.fastq -r 24_S1_R2.trim.fastq	# fileparse removes the .fastq part
+		# For PE FASTQ files
+		# Put R1/R2 just before the extension.  e.g., 24_S1_R2.trim.fastq output file will be 24_S1.trim.pid_R2.fastq; 24_S1_R1.fastq output file will be 24_S1.pid_R1.fastq
+		my $r = $1;
+		$filename =~ s/$r//;
+	#	$r =~ s/_/\./;
+		$filename .= $r;	
+							
+	}
+#	else {
+#		print STDERR "no match in file! $filename\n";
+#	}
+	
+	my $newfilename = $output_dir.$filename.$ext;
+
+	print STDERR "new file: $newfilename\n"; 
+	
+	return $newfilename;
+
+}
+#-----------------------------------------------------------------------------
