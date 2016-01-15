@@ -3,9 +3,10 @@
 use strict;
 use warnings;
 $| = 1;
+use File::Basename;
+use lib dirname (__FILE__);
 use aomisc;
 use Data::Dumper;
-use File::Basename;
 
 my $exe = basename($0);
 
@@ -31,6 +32,10 @@ LINE: while(<$readfh>){
 	} 
 	else {
 		my $consensus_residue = $line[4];
+		my $nuc_or_aa = nuc_or_aa($residue_to_header_index);
+		if ( ($consensus_residue eq 'N' && $nuc_or_aa eq 'nuc') || ($consensus_residue eq 'X' && $nuc_or_aa eq 'aa') ){	# consensus (majority) nucleotide residue is N or consensus (majority) amino acid residue is X (resulting from a codon that has a non-wobble N (can't determine aa from codon)
+			$consensus_residue = find_consensus_residue_manually(\@line,$residue_to_header_index);
+		}
 		my ($consensus_count,$nonconsensus_count,$major_alt_allele,$major_alt_allele_count) = (0,0,"",0);
 		
 		# If it's a normal residue, get consensus residue count and tally up nonconsensus residue counts and 
@@ -74,3 +79,35 @@ sub map_residues_to_header_indexes {
 #        };
 
 }
+##-----------------------------------
+sub nuc_or_aa {
+	my $hashref = shift;
+	my $nuc_or_aa = "";
+	
+	if (scalar(keys %$residue_to_header_index ) < 6){
+		$nuc_or_aa = 'nuc';
+	}
+	else {
+		$nuc_or_aa = 'aa';
+	}
+	return $nuc_or_aa;
+}
+##-----------------------------------
+sub find_consensus_residue_manually {
+	my ($line,$residue_to_header_index) = @_;
+	my ($max_freq,$max_res) = (0,"");
+	
+	# Walk through all of the residues in residue_to_header_index to see which one is highest.
+	foreach my $res (keys %$residue_to_header_index){
+		my $freq = $line->[$residue_to_header_index->{$res}];
+		if ($freq > $max_freq){
+			$max_freq = $freq;
+			$max_res = $res;
+		}
+	}
+
+	return $max_res;
+	
+}
+##-----------------------------------
+##-----------------------------------
