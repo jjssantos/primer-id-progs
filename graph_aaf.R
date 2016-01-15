@@ -35,11 +35,6 @@ if (!('position' %in% colnames(data))){
 	}
 }
 
-# Make sure we have a 'merged' column.
-#if (!('merged' %in% colnames(data))){
-#	# If no 'merged' column, set all values to 'F'
-#	data$merged = "F"	
-#}
 
 #print(head(data))
 library(ggplot2)
