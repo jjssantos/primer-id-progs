@@ -13,7 +13,7 @@ use File::Basename;
 
 #my $file = $ARGV[0];
 my $PWD = pwd_for_hpc();
-my $usage = basename($0)." <coverage file or BAM>
+my $usage = basename($0)." --bam_file <coverage file or BAM> --output_dir <directory>
 Coverage file is the output of genomeCoverageBed with option -d.
 Or, if input file is BAM, genomeCoverageBed will be run first with options -split -d.
 If input filename is /path/file.bam, output will be /path/file.pdf.
@@ -29,8 +29,8 @@ GetOptions(\%options,
 	   'output_dir=s'
 	   );
 
-die "I need a bam file to graph \n". $! unless ($options{bam_file} && (-e $options{bam_file}));
-die "I need an output_dir \n". $! unless ($options{output_dir});
+die "I need a bam file to graph \n$usage". $! unless ($options{bam_file} && (-e $options{bam_file}));
+die "I need an output_dir \n$usage". $! unless ($options{output_dir});
 $options{output_dir} =~ s/\/$//;
 system ("mkdir $options{output_dir}") unless -e $options{output_dir};
 die "failed to make output dir $options{output_dir}\n".$! unless -d $options{output_dir};

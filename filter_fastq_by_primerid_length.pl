@@ -66,6 +66,8 @@ e.g., filter_fastq_by_primerid_length.pl --pre GC --post AAGCAGT --file_in myfil
 # Allow input of a second fastq file (R2).  If supplied, the primerid will be placed in the header for that one too.
 # Printout graph of primerID counts (not just table)
 # Make option for --barcode_max 
+# Parallelize this script to make it faster.  Split into multiple files and process them separately, then merge them in order.  
+
 
 # Change Log
 # 2013-09-12 
