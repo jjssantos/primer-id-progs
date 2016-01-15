@@ -26,7 +26,7 @@ LINE: while(<$readfh>){
 	if ((m/^#/)|( m/name/i && m/consensus/i && m/ref/i && m/coverage/i) ){		# Sometimes the # is gone, in case of compare_variant_frequency.pl where the file is going into R, which doesn't like # in the header.
 		@header = @line;
 		$residue_to_header_index = map_residues_to_header_indexes(\@header);
-		print join "\t", @line, "numConsensus", "numNonConsensus", "numMajorAltAllele", "majorAltAllele"; 
+		print join "\t", @line, "unambigCoverageDepth", "numConsensus", "numNonConsensus", "numMajorAltAllele", "majorAltAllele"; 
 		print "\n";
 		next LINE;
 	} 
@@ -36,15 +36,16 @@ LINE: while(<$readfh>){
 		if ( ($consensus_residue eq 'N' && $nuc_or_aa eq 'nuc') || ($consensus_residue eq 'X' && $nuc_or_aa eq 'aa') ){	# consensus (majority) nucleotide residue is N or consensus (majority) amino acid residue is X (resulting from a codon that has a non-wobble N (can't determine aa from codon)
 			$consensus_residue = find_consensus_residue_manually(\@line,$residue_to_header_index);
 		}
-		my ($consensus_count,$nonconsensus_count,$major_alt_allele,$major_alt_allele_count) = (0,0,"",0);
+		my ($unambig_coverage,$consensus_count,$nonconsensus_count,$major_alt_allele,$major_alt_allele_count) = (0,0,0,"",0);
 		
 		# If it's a normal residue, get consensus residue count and tally up nonconsensus residue counts and 
 		if (exists ($residue_to_header_index->{$consensus_residue})){		# Only if it is one of the regular aa/nuc residues (not X, -, etc.)
 			my $index = $residue_to_header_index->{$consensus_residue};
 			$consensus_count = $line[$index];
 			foreach my $residue (keys %$residue_to_header_index){
+				my $this_count = $line[$residue_to_header_index->{$residue}];
+				$unambig_coverage += $this_count;
 				unless ($residue eq $consensus_residue){		# Don't add the consensus base/aa 
-					my $this_count = $line[$residue_to_header_index->{$residue}];
 					$nonconsensus_count += $this_count; 	# Add all other bases/aa's
 					($major_alt_allele,$major_alt_allele_count) = ($residue, $this_count) if ($this_count > $major_alt_allele_count);
 				}
@@ -52,7 +53,7 @@ LINE: while(<$readfh>){
 		}
 		
 		# Print out the data.
-		print join "\t", @line, $consensus_count, $nonconsensus_count, $major_alt_allele_count, $major_alt_allele; 
+		print join "\t", @line, $unambig_coverage, $consensus_count, $nonconsensus_count, $major_alt_allele_count, $major_alt_allele; 
 		print "\n";		
 	}
 }
@@ -101,8 +102,7 @@ sub find_consensus_residue_manually {
 	foreach my $res (keys %$residue_to_header_index){
 		my $freq = $line->[$residue_to_header_index->{$res}];
 		if ($freq > $max_freq){
-			$max_freq = $freq;
-			$max_res = $res;
+			($max_freq, $max_res) = ($freq, $res);
 		}
 	}
 
