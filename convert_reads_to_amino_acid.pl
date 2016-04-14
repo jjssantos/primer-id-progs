@@ -109,8 +109,6 @@ Optional Arguments:
 --label		Name(s) for sample(s), comma-delimited (no spaces) in the order in which 
 		they were input into --files. Default: Sample_1,Sample_2, etc.
 --prefix	Prefix for output files.  Default = Convert_reads
---mapq		Minimum read mapping quality to consider.  Default = 0.
---baseq		Minimum base quality to consider for translation.  Default = 0.
 --save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
 		will be created.
 -p/--cpu	Number of processors to use. Default = 1.
