@@ -36,7 +36,7 @@ $options{output_dir} =~ s/\/$//;
 system ("mkdir $options{output_dir}") unless -e $options{output_dir};
 die "failed to make output dir $options{output_dir}\n".$! unless -d $options{output_dir};
 
-system ("cp $options{ref} $options{fastq} $options{output_dir}");
+#system ("cp $options{ref} $options{fastq} $options{output_dir}");		# commented out by Andrew O. for now.  2016-01-09.
 my ($ref,$fastq) = map{$options{output_dir}.'/'.extract_file_name($_)}($options{ref},$options{fastq});
 die "failed to copy files properly $ref,$fastq\n".$! unless ((-e $ref) && (-e $fastq));
 
@@ -50,7 +50,9 @@ die unless -e $SORTSAMJAR;
 # Align with bwa mem
 my $bwaopts="-t $p -M -B 1";
 my $tmp_sam = $fastq.'.sam.gz';
-system "$BWA mem $bwaopts $ref $fastq | gzip > $tmp_sam";
+#my $bwa_cmd = "$BWA mem $bwaopts $ref $fastq | gzip > $tmp_sam";
+my $bwa_cmd = "$BWA mem $bwaopts $options{ref} $fastq | gzip > $tmp_sam";
+system($bwa_cmd);
 
 # Sort and index the alignment bam file
 my $tmp_bam = $fastq.'.bam';
