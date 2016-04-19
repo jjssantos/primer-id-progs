@@ -81,6 +81,7 @@ my $tiebreaker;
 my $ref;
 my $min_auto_gap_size = 1;
 my $min_freq = "";
+my $plot_only;
 GetOptions(
 	'save=s' => \$save, 
 	'output=s' => \$output, 
@@ -104,6 +105,7 @@ GetOptions(
 	'ref=s' => \$ref, 
 	'min_auto_gap_size=i' => \$min_auto_gap_size, 
 	'min_freq=s' => \$min_freq,
+	'plot_only' => \$plot_only,
 );
 
 #-----------------------------------------------------------------------------
@@ -169,6 +171,7 @@ OPTIONS:
 		need to have a gap of this size in order for it to be considered a gap.
 --plot_counts	Make a graph of primerID group counts based on size of group (i.e., number
 		of reads with the same primerID).
+--plot_only	Simply plot primerID counts and then quit.
 --min_freq	When calling a consensus base for a particular position, the frequency of the 
 		major base should be equal to or higher than this value.  If the value falls below
 		this threshold, the assigned base is N.  The default is to take the major base 
@@ -298,7 +301,7 @@ for (my $i = 0; $i < @files; $i++){
 	my $read_tally = read_fasta($fasta);
 
 #			print Dumper($read_tally); exit;
-	my $consensus_sequences = make_consensus($read_tally, $file, $sample_consensus_seq);	# Need to pass it the file as well, so it can use the name to construct a new name for the consensus bam/fastq/fasta file
+	my $consensus_sequences = make_consensus($read_tally, $file, $sample_consensus_seq) unless $plot_only;	# Need to pass it the file as well, so it can use the name to construct a new name for the consensus bam/fastq/fasta file
 	
 }
 
@@ -401,8 +404,8 @@ sub convert_bam_to_fasta {
 	my ($bam_prefix,$dir,$ext) = fileparse($bam_file,@suffixes);
 	
 	# First check to see whether the input file has been converted to fasta already.  Check based on the extension.  
-	#if ($ext =~ m/bam/i){	# < andrew
-	if (1){			# < philip macmenamin
+	if ($ext =~ m/bam/i){	# < andrew
+	#if (1){			# < philip macmenamin
 		my $fasta = $save_dir . "/" . $bam_prefix . '.fasta'; 
 		my $cmd = "$bam2fastx_bin -a -o $fasta -A $bam_file 2> /dev/null";
 		print STDERR "Executing command to make fasta file: $cmd\n";
