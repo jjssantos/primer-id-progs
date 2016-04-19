@@ -82,6 +82,7 @@ my $ref;
 my $min_auto_gap_size = 1;
 my $min_freq = "";
 my $plot_only;
+my $temp_dir = "/tmp";
 GetOptions(
 	'save=s' => \$save, 
 	'output=s' => \$output, 
@@ -106,6 +107,7 @@ GetOptions(
 	'min_auto_gap_size=i' => \$min_auto_gap_size, 
 	'min_freq=s' => \$min_freq,
 	'plot_only' => \$plot_only,
+	'temp_dir=s' => \$temp_dir,
 );
 
 #-----------------------------------------------------------------------------
@@ -176,6 +178,7 @@ OPTIONS:
 		major base should be equal to or higher than this value.  If the value falls below
 		this threshold, the assigned base is N.  The default is to take the major base 
 		regardless of the frequency.  Suggested: value between 0.60 and 0.75.  
+--temp_dir	Directory to use for temporary files.  Default is /tmp .
 ";
 
 # To Do:
@@ -253,6 +256,10 @@ OPTIONS:
 # 2015-05-13
 # Added --min_auto_gap_size option.  Default = 3.
 # Changed name of output ambig.fasta file to remove the threshold number of ambig positions
+# 2016-04-19
+# Added --plot_only
+# Allowing .fasta input again.
+# Added --temp_dir.  /tmp/ is default, but I want to try /hpcdata/scratch in case local /tmp is getting overloaded.
 
 unless ($files||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
@@ -278,6 +285,8 @@ unless ($R1_length =~ m/^\d+$/ || $R1_length =~ m/^auto$/i){
 my $save_dir = $save || Cwd::cwd();
 unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
 print STDERR "save directory: $save_dir\n";
+
+unless (-d $temp_dir){	mkdir($temp_dir) or warn "$!\n"	}
 
 
 my $start_time = time;
@@ -321,7 +330,7 @@ sub get_sample_consensus {
 	my ($file,$ref) = @_;
 	
 	# Set up temporary directory 
-	my $tempdir = File::Temp->newdir(  "/tmp/fasta_file_sample_consensus_tempXXXXXX" );
+	my $tempdir = File::Temp->newdir(  "/$temp_dir/fasta_file_sample_consensus_tempXXXXXX" );
 	
 	# Make sure we have a BAM file for making a consensus.  If not, align to the reference with BWA MEM.
 	my $bam = "";	# bam file name  
@@ -732,7 +741,7 @@ sub make_consensus {
 
 		# Create temporary fasta file of the sequences for this primerID.  
 		my $cwd = Cwd::cwd();
-		my $tempdir = File::Temp->newdir(  "/tmp/fasta_file_".$count."_tempXXXXXX" );
+		my $tempdir = File::Temp->newdir(  "$temp_dir/fasta_file_".$count."_tempXXXXXX" );
 		my $temp_fasta	= $tempdir."/temp.fa";
 		my $temp_aln 	= $tempdir."/temp.aln";
 		my $fh = open_to_write($temp_fasta, 0, 0, 1);
