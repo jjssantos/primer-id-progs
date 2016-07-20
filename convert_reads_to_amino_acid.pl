@@ -237,7 +237,10 @@ Notes:
 # 2015-08-14
 # Fixed a bug in read_input_reads where it was updating the nucleotide for a position even if it was a gap character.  See https://github.niaid.nih.gov/macmenaminpe/primer-id-progs/issues/9
 # Also modify read_input_reads so that all indel-containing consensus reads are tossed (at least for now).  Put in @toss array.  
-
+# 2016-07-20
+# Changed mafft gap opening penalty from 1.4 to 1.3 to allow insertion to be created when necessary.
+# Remove in-frame indels from @good and put in @toss array.
+# Fix substitution for @all_codons array to work with '*' for stop codons
 
 
 unless ($ref && ($files||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
@@ -588,12 +591,26 @@ sub read_input_reads {
 	#		my $factory = Bio::Tools::Run::Alignment::MAFFT->new("-clustalout" => 1, "-quiet" => 1, );		# For some reason, it's ignoring these parameters...
 	#		my $aln = $factory->align("$temp_fasta"); 	# $aln is a SimpleAlign object.  http://search.cpan.org/~cjfields/BioPerl-1.6.901/Bio/SimpleAlign.pm.  
 
-			my $cmd = "$mafft_bin --quiet --thread $cpu --op 1.4 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
+			my $cmd = "$mafft_bin --quiet --thread $cpu --op 1.3 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
 #>Seq12_part
 #TTCGAAAGATTCAAAATATTT CCC AAA GAA AGC TCA TGG CCC GACCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
 #>GGAAAGACGG
 #TTCGAAAGATTCAAAATATTT CCC AAA AA AGC TCA TGG GCCC GACCACAACACAAACGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCNNNNNNNTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
 								if ($debug){	print STDERR "Running command: $cmd\n";		} 
+# Was --op 1.4, changing to 1.3 because sometimes 1.4 is even too stringent, e.g., 
+#>HA
+#ATGAAGGCAAACCTACTGGTCCTGTTATGTGCACTTGCAGCTGCAGATGCAGACACAATATGTATAGGCTACCATGCGAACAATTCAACCGACACTGTTGACACAGTACTCGAGAAGAATGTGACAGTGACACACTCTGTTAACCTGCTCGAAGACAGCCACAACGGAAAACTATGTAGATTAAAAGGAATAGCCCCACTACAATTGGGGAAATGTAACATCGCCGGATGGCTCTTGGGAAACCCAGAATGCGACCCACTGCTTCCAGTGAGATCATGGTCCTACATTGTAGAAACACCAAACTCTGAGAATGGAATATGTTATCCAGGAGATTTCATCGACTATGAGGAGCTGAGGGAGCAATTGAGCTCAGTGTCATCATTCGAAAGATTCGAAATATTTCCCAAAGAAAGCTCATGGCCCAACCACAACACAAACGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAGCAGTTTTTACAGAAATTTGCTATGGCTGACGGAGAAGGAGGGCTCATACCCAAAGCTGAAAAATTCTTATGTGAACAAAAAAGGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAGAGATCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTCGCACTGAGTAGAGGCTTTGGGTCCGGCATCATCACCTCAAACGCATCAATGCATGAGTGTAACACGAAGTGTCAAACACCCCTGGGAGCTATAAACAGCAGTCTCCCTTACCAGAATATACACCCAGTCACAATAGGAGAGTGCCCAAAATACGTCAGGAGTGCCAAATTGAGGATGGTTACAGGACTAAGGAACATTCCGTCCATTCAATCCAGAGGTCTATTTGGAGCCATTGCCGGTTTTATTGAAGGGGGATGGACTGGAATGATAGATGGATGGTATGGTTATCATCATCAGAATGAACAGGGATCAGGCTATGCAGCGGATCAAAAAAGCACACAAAATGCCATTAACGGGATTACAAACAAGGTGAACACTGTTATCGAGAAAATGAACATTCAATTCACAGCTGTGGGTAAAGAATTCAACAAATTAGAAAAAAGGATGGAAAATTTAAATAAAAAAGTTGATGATGGATTTCTGGACATTTGGACATATAATGCAGAATTGTTAGTTCTACTGGAAAATGAAAGGACTCTGGATTTCCATGACTCAAATGTGAAGAATCTGTATGAGAAAGTAAAAAGCCAATTAAAGAATAATGCCAAAGAAATCGGAAATGGATGTTTTGAGTTCTACCACAAGTGTGACAATGAATGCATGGAAAGTGTAAGAAATGGGACTTATGATTATCCCAAATATTCAGAAGAGTCAAAGTTGAACAGGGAAAAGGTAGATGGAGTGAAATTGGAATCAATGGGGATCTATCAGATTCTGGCGATCTACTCAACTGTCGCCAGTTCACTGGTGCTTTTGGTCTCCCTGGGGGCAATCAGTTTCTGGATGTGTTCTAATGGATCTTTGCAGTGCAGAATATGCATCTGA
+#>1572-1
+#CCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTCGCACTGAGTAGAGGCTTTGGGTCCGGCATCATCACCTCAAACGCATCAATGCATGAGTGTAACACGAAGTGTCAAACACCCTGGGAG
+# With 1.4 no gap introduced:
+#HA              atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacacccctggga
+#1572-1          atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacaccctgggag
+#                ******************************************************. **..
+# With 1.3, gap is introduced:
+#HA              atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacacccctggga
+#1572-1          atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaaca-ccctggga
+#                *************************************************** ********
+
 			system($cmd);
 			my $aln_in = Bio::AlignIO->new(
 				-file 	=> $temp_aln,
@@ -631,7 +648,7 @@ sub read_input_reads {
 		
 		my $seq_info; # HoH hashref with first level keys 'nuc', 'codon', 'aa', 'frameshift_positions', 'type', 'full_seqs'; second level keys are positions with value as the base, codon, or aa for the read.  Value for key frameshift_positions is a reference to @frameshift_positions.  Value for key 'type' is a reference to \%type.  Value for 'full_seqs' is hash with keys 'nuc' and 'aa'
 		my %type; 	# Codon types.  keys 'normal', 'in-frame_indel', 'out-of-frame_indel', 'unknown'
-		my $toss = 0;		# Will become 1 if the read has a premature stop codon due to a frameshift.  Then the local hash $seq_info will be pushed to @toss instead of @good.
+		my $toss = 0;		# Will become 1 if the read has a premature stop codon due to a frameshift.  Then the local hash $seq_info will be pushed to @toss instead of @good.  2016-07-19: Will become 1 if in-frame_indel encountered too.
 		
 		my ($full_read_nuc,$full_read_aa);
 		
@@ -713,7 +730,7 @@ sub read_input_reads {
 			
 			# Save the codon type at this position.  (Not sure how useful this will be...) 
 				# if ($frameshift == 0), then they are an in-frame codons, so translate read_codon and store it in the local hash.  
-				# if (($frameshift != 0) && ( ($frameshift % 3) = 0) ), then it is an in frame insertion/deletion, which is fine 
+				# if (($frameshift != 0) && ( ($frameshift % 3) = 0) ), then it is an in frame insertion/deletion, which is fine.  2016-07-19, decided these are not fine because they mess up the allele frequency plots -- raises background level of allele frequency.  Tossing now.  (actually, it's mainly the in-frame insertions that are the problem).
 				# if ( ($frameshift % 3) == 0), then it is a frameshifted codon.  Translate it and flag the read; if we reach a stop codon further down, then mark the read to be tossed.  
 					# If it's a STOP (*) then mark the read so the local hash will be added to the the global array @toss instead of @good.  Save the position of the last 
 			if ($frameshift == 0){		# In-frame codons with no indel present.  Most often, we'll be here.  
@@ -721,6 +738,8 @@ sub read_input_reads {
 			}
 			elsif(($frameshift != 0) && ( ($frameshift % 3) == 0) ){		# In-frame codons with an insertion/deletion present (i.e., length of insertion or deletion is a multiple of 3)
 				$type{'in-frame_indel'}++;
+				$toss = 1;
+							if ($verbose){	print STDERR "in-frame_indel found.  Reads containing in-frame indels cause inappropriate variants to be reported in the output tally files due to shifting of the bases and amino acids compared to the consensus/reference.  Tossing the read.\n"; }
 			}
 			elsif( ($frameshift % 3) != 0){		# Frameshift codon.  Translate it 
 				$type{'out-of-frame_indel'}++;
@@ -749,12 +768,12 @@ sub read_input_reads {
 
 		
 		}	
-		
+
 		# Save @frameshift_positions to local hash
 		$seq_info->{'frameshift_positions'} = \@frameshift_positions;
 		
 		# Save %type to local hash.  TESTING
-		$seq_info->{'type'} = \%type;
+		$seq_info->{'codon_type'} = \%type;
 		
 		# Save the full sequences to local hash
 		$seq_info->{'full_seqs'}->{'nuc'} = uc($full_read_nuc);
@@ -805,6 +824,11 @@ sub read_input_reads {
 	foreach my $seq_info (@good){
 							if ($debug){	print Dumper($seq_info->{full_seqs});	}
 							if ($debug){	print Dumper($seq_info);				}
+							if ($debug){	print Dumper($seq_info->{codon_type});				
+			my @aa_pos = sort {$a <=> $b } keys %{$seq_info->{aa}};
+			print STDERR "first position:	$aa_pos[0]\naa: $seq_info->{aa}->{$aa_pos[0]}\ncodon: $seq_info->{codon}->{$aa_pos[0]}\n";
+			print STDERR "last position:	$aa_pos[-1]\naa: $seq_info->{aa}->{$aa_pos[-1]}\ncodon: $seq_info->{codon}->{$aa_pos[-1]}\n";
+		}
 		
 		my $seq_count = get_count_from_id( $seq_info->{'id'} );
 		
@@ -843,7 +867,7 @@ sub read_input_reads {
 
 		
 	# Walk through the sequences in @toss, tally up last frameshift positions (for deletions and insertions separately)
-	my $indels;	 # hashref to tally the positions of insertions and deletions.  first keys deletion_in_read, insertion_in_read; second keys positions, value = count
+	my $indels;	 # hashref to tally the positions of frameshift insertions and deletions.  first keys deletion_in_read, insertion_in_read; second keys positions, value = count
 	foreach my $seq_info (@toss){
 		#print Dumper($seq_info->{frameshift_positions}); exit;
 		my $seq_count = get_count_from_id( $seq_info->{'id'} );
@@ -852,7 +876,7 @@ sub read_input_reads {
 			$indels->{$indel}->{$pos} += $seq_count;
 		}
 	}
-	print STDERR "Location of indels in tossed reads:\n" if ($toss_unique_count);
+	print STDERR "Location of frameshifting indels in tossed reads:\n" if ($toss_unique_count);
 	foreach my $indel (keys %$indels){
 		print STDERR "Ref_Nuc_Pos\t$indel\n";
 		foreach my $pos (sort {$a <=> $b} keys %{$indels->{$indel}}){
@@ -872,7 +896,7 @@ sub read_input_reads {
 sub count_total_from_good_toss_arrays {
 	my ($array,$good_or_toss) = @_;
 	# Array is an AoH where a pertinent key in the has is the sequence id, which has format such as  2-520, meaning sequence 2, count = 520.
-	my ($unique_count,$total_count);
+	my ($unique_count,$total_count) = (0,0);
 	foreach my $seq (@$array){
 		$unique_count++;
 		my $id = $seq->{'id'};
@@ -1166,7 +1190,7 @@ sub print_reports {
 
 	my @all_codons = @CODON;
 	for (@all_codons){
-		s/:\w+//;
+		s/:.+//;		# Was s/:\w+//;  changed to s/:.+//; for numTAA:* and others with *
 	}
 		
 	
