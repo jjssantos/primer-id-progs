@@ -108,10 +108,10 @@ my $writefh =
 	($output) ? open_to_write($output) :
 		*STDOUT;
 
-print $writefh join "\t", "sample", "name", "position", "coverageDepth", "numNonConsensus", "merged";
+print $writefh join "\t", "sample", "name", "position", "coverageDepth", "unambigCoverageDepth", "numNonConsensus", "merged";
 print $writefh "\n";
 foreach my $pos (sort {$a <=> $b} keys %$data){
-	print $writefh join "\t", $label, $data->{$pos}->{name}, $pos, $data->{$pos}->{coverageDepth}, $data->{$pos}->{numNonConsensus}, $data->{$pos}->{merged};
+	print $writefh join "\t", $label, $data->{$pos}->{name}, $pos, $data->{$pos}->{coverageDepth}, $data->{$pos}->{unambigCoverageDepth}, $data->{$pos}->{numNonConsensus}, $data->{$pos}->{merged};
 	print $writefh "\n";
 }
 
@@ -127,9 +127,10 @@ sub read_tally {
 	my @header = get_header($file);
 	$header[0] =~ s/^#//;
 	my $h_lookup = column_header_lookup_hash(\@header);
-	my $name_index 		= $h_lookup->{'name'};
-	my $cov_index 		= $h_lookup->{'coverageDepth'};
-	my $noncon_index 	= $h_lookup->{'numNonConsensus'};
+	my $name_index 			= $h_lookup->{'name'};
+	my $cov_index 			= $h_lookup->{'coverageDepth'};
+	my $noncon_index 		= $h_lookup->{'numNonConsensus'};
+	my $unambig_cov_index 	= $h_lookup->{'unambigCoverageDepth'};
 	my $pos_index = 															# aminoAcidPosition OR nucleotidePosition OR codonPosition
 		(exists($h_lookup->{aminoAcidPosition}))		? $h_lookup->{aminoAcidPosition} :
 		(exists($h_lookup->{nucleotidePosition}))	? $h_lookup->{nucleotidePosition} :
@@ -142,7 +143,7 @@ sub read_tally {
 		chomp;
 		next if (m/coverageDepth/);		 #skip header column
 		my @F = split(/\t/);
-		my ($name, $pos, $cov, $noncon) = ($F[$name_index], $F[$pos_index], $F[$cov_index], $F[$noncon_index]);
+		my ($name, $pos, $cov, $noncon, $unambig_cov) = ($F[$name_index], $F[$pos_index], $F[$cov_index], $F[$noncon_index], $F[$unambig_cov_index]);
 
 		$data->{$pos}->{name} = $pos unless exists($data->{$pos}->{name});
 		if (exists($data->{$pos}->{coverageDepth})){
@@ -154,6 +155,7 @@ sub read_tally {
 		
 		$data->{$pos}->{coverageDepth} += $cov;
 		$data->{$pos}->{numNonConsensus} += $noncon;
+		$data->{$pos}->{unambigCoverageDepth} += $unambig_cov;
 	}
 	
 	close($readfh);

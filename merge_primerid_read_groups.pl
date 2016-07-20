@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 use warnings;
 select STDOUT;		 # Turn off buffering for STDOUT for printing from multiple processes at the same time.
 $| = 1;
@@ -58,7 +59,8 @@ use File::Copy;
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 my $PWD  = pwd_for_hpc();
 my $bam2fastx_bin = $PWD.'/bam2fastx'; # philip macmenamin
-my $mafft_bin = $PWD.'/mafft';
+#my $mafft_bin = $PWD.'/mafft';
+my $mafft_bin = 'mafft';
 my $save;
 my $files;
 my $verbose;
@@ -145,8 +147,7 @@ OPTIONS:
 -t/--tiebreaker	Use intra-sample consensus as a tie-breaker in cases where there is a tie 
 		for the majority base at a position in a primerID group.  e.g., 2G, 2A.  
 		Recommended if using --min_reads 2. It is recommended to supply reference fasta to 
-		--ref option to speed up the step to create intra-sample consensus.  Requires 
-		samtools, bcftools, vcfutils.pl and seqtk on the PATH.  
+		--ref option to speed up the step to create intra-sample consensus.  
 --ref		Reference cds file that the reads in the BAM file were aligned to.  Used with
 		--tiebreaker.
 --clustalw	Use clustalw to run alignments. Default is to use mafft.  *Executables must be 
@@ -190,6 +191,9 @@ OPTIONS:
 # Make Bio::Tools::Run::Alignment::Clustalw requirement conditional on --clustalw option (using eval)
 # Take fasta or fastq input
 # Clean out old subs not being used anymore.
+# Modify parallelization to reduce memory usage.  Make multiple threads and write results out to temp files (save names of temp files to shared array for subsequent concatenation).  How to make different names for files?  Increment n in the while loop.
+#	Or I could split the file when grouping by primerID group and send off multiple jobs to the cluster, then manually merge the files afterwards.  Could use Queue.
+
 
 # Change log
 # 130301
@@ -260,6 +264,10 @@ OPTIONS:
 # Added --plot_only
 # Allowing .fasta input again.
 # Added --temp_dir.  /tmp/ is default, but I want to try /hpcdata/scratch in case local /tmp is getting overloaded.
+# 2016-06-18
+# UPdated samtools in repo to 1.3.  Added bcftools, vcfutils and seqtk to the repo. 
+#	Requires samtools, bcftools, vcfutils.pl and seqtk on the PATH.  
+
 
 unless ($files||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
@@ -329,6 +337,13 @@ sub get_sample_consensus {
 	
 	my ($file,$ref) = @_;
 	
+	# Paths
+	my $BWA = $PWD . "/bwa";
+	my $samtools = $PWD . "/samtools";
+	my $seqtk = $PWD . "/seqtk";
+	my $bcftools = $PWD . "/bcftools";
+	my $vcfutils = $PWD . "/vcfutils.pl";
+
 	# Set up temporary directory 
 	my $tempdir = File::Temp->newdir(  "/$temp_dir/fasta_file_sample_consensus_tempXXXXXX" );
 	
@@ -348,7 +363,7 @@ sub get_sample_consensus {
 		$bam = $bam_prefix . ".bam";
 		my $temp_sam = $tempdir . "/temp.sam.gz"; 
 #		my $bwa_mem_cmd = "bwa index $ref; bwa mem -t $cpu -M $ref $file | gzip > $temp_sam; java -Xmx3G -jar $SORTSAMJAR I=$tempdir/temp.sam.gz O=$bam CREATE_INDEX=true SO=coordinate";
-		my $bwa_mem_cmd = "bwa index $ref; echo; bwa mem -t $cpu -M $ref $file | samtools view -uS -| samtools sort - $bam_prefix && samtools index $bam";
+		my $bwa_mem_cmd = "$BWA index $ref; echo; $BWA mem -t $cpu -M $ref $file | $samtools view -uS -| $samtools sort - $bam_prefix && $samtools index $bam";
 		print STDERR "Running command:\n$bwa_mem_cmd\n";
 		system($bwa_mem_cmd);	 # Run alignment
 #		print "Screen Output:$output\n";
@@ -362,10 +377,11 @@ sub get_sample_consensus {
 	# Note that this method can call an ambiguous residue in the consensus if there aren't very many reads
 	my $cmd = "";
 	if ($ref){
-		$cmd = "samtools mpileup -uf $ref $bam | bcftools view -cg - | vcfutils.pl vcf2fq | seqtk seq -A -  > $temp_fasta";
+		# $cmd = "$samtools mpileup -uf $ref $bam | bcftools view -cg - | vcfutils.pl vcf2fq | seqtk seq -A -  > $temp_fasta";
 	}
 	else {
-		$cmd = "samtools mpileup -u $bam | bcftools view -cg - | vcfutils.pl vcf2fq | seqtk seq -A -  > $temp_fasta";	
+		# $cmd = "$samtools mpileup -u $bam | bcftools view -cg - | vcfutils.pl vcf2fq | seqtk seq -A -  > $temp_fasta";	
+		$cmd = "$samtools mpileup -u $bam | $bcftools call -c | $vcfutils vcf2fq | $seqtk seq -A -  > $temp_fasta";
 	}
 
 	# Run the command to create the consensus
@@ -725,8 +741,8 @@ sub make_consensus {
 #	print Dumper($sequences); #exit;
 	
 	# Set up shared variables to store data.
-	my (@ambiguous,@good,@ambiguous_positions);	 # arrays to save or count the number of primerid groups that are completely good or that have one or more ambiguous character.  For @good and @ambiguous, each element is an arrayref with primerID and consensus sequence.  @ambiguous_positions will have an array of all ambiguous positions found in the reads; this array can't be used to count the number of ambiguous sequences since some sequences will have multiple ambiguous sequences.
-	$pl->share(\@ambiguous, \@good, \@ambiguous_positions);
+	my (@ambiguous,@good,@ambiguous_positions,@min_freq_positions);	 # arrays to save or count the number of primerid groups that are completely good or that have one or more ambiguous character.  For @good and @ambiguous, each element is an arrayref with primerID and consensus sequence.  @ambiguous_positions will have an array of all ambiguous positions found in the reads; this array can't be used to count the number of ambiguous sequences since some sequences will have multiple ambiguous sequences.
+	$pl->share(\@ambiguous, \@good, \@ambiguous_positions, \@min_freq_positions);
 	
 	$pl->while( sub {$count++; $primerID = $primerIDs[$count - 1]; },	sub {			# was $pl->foreach( \@primerIDs,	sub {	
 #		$primerID  = $_; 
@@ -805,6 +821,7 @@ sub make_consensus {
 		my $nongap_ambig_count = 0; 
 		my $ambig_summary_for_fasta_header_def = "";	# String to add to fasta header after the primerID.  positions and ambiguous characters that were found outside of the gap.  Helpful for understanding why a read was put in the ambig fasta file.  
 		my $res_num = 1;		# Residue number.  This is the position of the residue within the final consensus sequence.  
+		my @this_min_freq_positions;
 		for (my $pos = 1; $pos <= $len; $pos++){		# $pos is the position in the alignment.  It is usually the same as $res_num, residue number, except when there is an indel (-)
 			my %count; 
 			foreach my $seq ($aln->each_seq() ) {		# Looking at each base in the column, counting up the bases.
@@ -863,6 +880,7 @@ sub make_consensus {
 				my $max_freq = $max_key_value->[0]->[1] / total(values %count);
 				if ($min_freq && $max_freq < $min_freq){
 					$res = "N"; 	# assign ambiguous
+					push @this_min_freq_positions, $res_num;
 				}
 			}
 			
@@ -940,8 +958,9 @@ sub make_consensus {
 			my $id = $primerID . $ambig_summary_for_fasta_header_def;
 			my @id_seq = ($id, $cons_seq);
 			push @ambiguous, \@id_seq; 	# Increment the ambiguous tossed read count
-			push @ambiguous_positions, @ambig_pos; 		# Add the whole array of ambiguous positions to the shared array of ambiguous positions
 		}
+		push @ambiguous_positions, @ambig_pos; 		# Add the whole array of ambiguous positions to the shared array of ambiguous positions
+		push @min_freq_positions, \@this_min_freq_positions;	# Add arrayref of nucleotide positions where an ambiguous base was called because the maximum base called was less than --min_freq
 		
 	}
 	); 	### End of Parallel Loop
@@ -983,7 +1002,7 @@ sub make_consensus {
 		foreach (@ambiguous_positions){
 			$ambig_pos{$_}++;
 		}
-		print STDERR "\nAmbiguous positions (not including N bases outside of gap):\n#Position\tcount\n";
+		print STDERR "\nAmbiguous positions (not including N bases in the gap, if any):\n#Position\tcount\n";
 #		foreach my $res_num (sort { $ambig_pos{$b} <=> $ambig_pos{$a} } keys %ambig_pos){		# Sort in descending order by the most prominent position. Or should I sort in ascending order by position?
 		foreach my $res_num (sort { $a <=> $b } keys %ambig_pos){		# Sort in ascending order by position
 			print STDERR "$res_num\t$ambig_pos{$res_num}";
@@ -992,6 +1011,26 @@ sub make_consensus {
 			}
 			print STDERR "\n";
 		}
+	}
+	# Print out a table of ambiguous positions due to min_freq
+	if (@min_freq_positions){
+		my $min_freq_read_count = scalar(@min_freq_positions);
+		print STDERR "Reads with ambiguous bases due to min_freq: $min_freq_read_count\n";
+		my %min_freq_pos;
+                foreach my $read (@min_freq_positions){
+                        foreach my $pos (@$read){
+				$min_freq_pos{$pos}++;
+			}
+                }
+                print STDERR "\nAmbiguous positions due to min_freq threshold:\n#Position\tcount\n";
+                foreach my $res_num (sort { $a <=> $b } keys %min_freq_pos){               # Sort in ascending order by position
+                        print STDERR "$res_num\t$min_freq_pos{$res_num}";
+                        if (($res_num >= $middle[0]) && ($res_num <= $middle[1])){
+                                print STDERR "\tGAP";
+                        }
+                        print STDERR "\n";
+                }
+
 	}
 	
 }
@@ -1303,7 +1342,7 @@ sub make_consensus_old {
 		
 	}
 	close($writefh);
-	system($PWD."/samtools view -bS $consensus_sam_filename | samtools sort - $consensus_bam_filename ");
+	system($PWD."/samtools view -bS $consensus_sam_filename | " . $PWD . "/samtools sort - $consensus_bam_filename ");
 	system($PWD."/samtools index $consensus_bam_filename" . ".bam");
 	return $consensus_sequences;
 }

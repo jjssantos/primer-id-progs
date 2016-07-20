@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 use strict;
 use warnings;
 use Getopt::Long;
@@ -8,19 +9,23 @@ use aomisc;
 
 my $PWD  = pwd_for_hpc();
 
-my $SORTSAMJAR="/usr/local/bio_apps/picard-tools-1.75/SortSam.jar";
-#my $BWA=$PWD."/specific_progs/bwa";
-my $BWA='/usr/local/bio_apps/bwa/bwa';
+#my $SORTSAMJAR="/usr/local/bio_apps/picard-tools-1.75/SortSam.jar";
+#my $SORTSAMJAR=$PWD."/SortSam.jar";
+my $SORTSAM = $PWD . "/picard.jar SortSam";
+my $BWA=$PWD."/bwa";
+#my $BWA='/usr/local/bio_apps/bwa/bwa';
 my $INTERSECTBED=$PWD."/intersectBed";
 my $BAMTOBED=$PWD."/bamToBed";
 my $GET_MAJORITY_START_STOP_PL=$PWD."/get_majority_start_stop.pl";
 my $SAMTOOLS=$PWD."/samtools";
-my $JAVA="/usr/local/bio_apps/java/bin/java";
+#my $JAVA="/usr/local/bio_apps/java/bin/java";
+my $JAVA='java';
 my $p=8;						# Number of threads to use for BWA. 
 
 my %options;
 $options{ref} = '';		# eg data_default/Seq12_093009_HA_cds.fa
 $options{fastq} = '';
+$options{p} = 8;
 
 GetOptions(\%options,
            'ref=s',
@@ -28,9 +33,17 @@ GetOptions(\%options,
 	   'output_dir=s'
 	   );
 
-die "I need a ref file to index \n". $! if (($options{ref} eq '') || (! -e $options{ref}));
-die "I need a fastq file to index \n". $! if (($options{fastq} eq '') || (! -e $options{fastq}));
-die "I need an output_dir \n". $! if ($options{output_dir} eq '');
+my $usage="
+OPTIONS:
+-ref		Reference sequence.  Required.
+-fastq		Fastq input file.  Required.
+-output_dir		Output directory.  Required.
+-p		Number of threads for BWA.  Default = 8.
+";
+
+die "I need a ref file (-ref)\n$usage\n". $! if (($options{ref} eq '') || (! -e $options{ref}));
+die "I need a fastq file (-fastq)\n". $! if (($options{fastq} eq '') || (! -e $options{fastq}));
+die "I need an output_dir (-output_dir)\n". $! if ($options{output_dir} eq '');
 $options{output_dir} =~ s/\/$//;
 
 system ("mkdir $options{output_dir}") unless -e $options{output_dir};
@@ -45,7 +58,7 @@ die "failed to copy files properly $ref,$fastq\n".$! unless ((-e $ref) && (-e $f
 # die "I tried to index $ref but failed.".$! unless  -e $ref.'.bwt';
 
 # Check to see if SortSam.jar is present
-die unless -e $SORTSAMJAR;
+#die unless -e $SORTSAMJAR;
 
 # Align with bwa mem
 my $bwaopts="-t $p -M -B 1";
@@ -56,7 +69,7 @@ system($bwa_cmd);
 
 # Sort and index the alignment bam file
 my $tmp_bam = $fastq.'.bam';
-system "$JAVA -Xmx3G -jar $SORTSAMJAR I=$tmp_sam O=$tmp_bam CREATE_INDEX=true SO=coordinate\n";
+system "$JAVA -Xmx3G -jar $SORTSAM I=$tmp_sam O=$tmp_bam CREATE_INDEX=true SO=coordinate\n";
 
 # Get the majority start stop bed file (single bed region)
 my $tmp_bed=$fastq.'.temp_majority.bed';

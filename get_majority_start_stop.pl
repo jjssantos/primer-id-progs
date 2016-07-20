@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 
 # Takes a bed file as STDIN and outputs a single bed region for the majority sequence.
 # E.g., bamToBed -i $bam | get_majority_start_stop.pl > majority.bed

@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 
 use warnings;
 $| = 1;

@@ -1,15 +1,24 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+
+#Add use lib statement to assume there is a directory at the same level as bin in which the script is run, called 'lib'
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin";
 
 use strict;
 use warnings;
 use Getopt::Long;
 use File::Basename;
+use aomisc;
 
 #use lib::helper_funcs;
 
 my $output_dir = '';
 my $meta_file = '';
-my $SAMTOOLS = '/usr/local/bio_apps/samtools/samtools';
+my $PWD = pwd_for_hpc();
+#my $SAMTOOLS = '/usr/local/bio_apps/samtools/samtools';
+my $SAMTOOLS = $PWD . "/samtools";
 
 GetOptions('output_dir=s'=>\$output_dir,
 	   'meta_file=s'=>\$meta_file

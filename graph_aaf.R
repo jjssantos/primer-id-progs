@@ -12,15 +12,22 @@
 args <- commandArgs(TRUE)
 pdfname <- sub("[.][^.]*$", ".pdf", args[1], perl=TRUE)
 #print(pdfname)
-data <- read.delim(args[1])
+data_in <- read.delim(args[1])
+#head(data_in)
+data <- subset(data_in, unambigCoverageDepth != 0)		# To avoid dividing by zero
 #data$freqNonConsensus = data$numNonConsensus/data$coverageDepth
 data$freqNonConsensus = data$numNonConsensus/data$unambigCoverageDepth
+#head(data)
 meanfreq <- mean(data$freqNonConsensus)
 medianfreq <- median(data$freqNonConsensus)
 medianfreq.round <- signif(medianfreq, digits=3)
 print(paste("Replacing zero with median frequency:", medianfreq.round))
 # How do I get the average background??  medianfreq is closer to the average background.
-for (i in row.names(data)){if(data[i,"freqNonConsensus"] == 0){ data[i,"freqNonConsensus"] = medianfreq } }		# Replace zero values with median frequency
+for (i in row.names(data)){
+	if(data[i,"freqNonConsensus"] == 0){ 
+		data[i,"freqNonConsensus"] = medianfreq 
+	} 
+}		# Replace zero values with median frequency
 
 # Make sure we have a 'position' column.
 if (!('position' %in% colnames(data))){

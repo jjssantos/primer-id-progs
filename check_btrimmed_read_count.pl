@@ -1,4 +1,12 @@
 #!/usr/bin/env perl
+use warnings;
+$| = 1;
+
+#Add use lib statement to assume there is a directory at the same level as bin in which the script is run, called 'lib'
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin";
+
 use strict;
 use Data::Dumper; 
 use File::Basename; 
@@ -34,7 +42,7 @@ foreach my $file (@ARGV){
 		print STDERR "Problem with extension: $ext\nIs this file from Btrim64?\n$file\n"; 
 		exit; 
 	}
-	my $wc = `wc -l $file`; 
+	my $wc = `wc -l $file | cut -f 1 -d " "`; 
 	$wc = $wc / 4; 
 	$hash->{$ext} = $wc; 
 } 

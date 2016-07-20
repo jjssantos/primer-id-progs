@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 use strict;
 use warnings;
 $| = 1;
@@ -290,7 +291,7 @@ sub plot_counts {
 		"pdf(\"$group_count_graph\")",
 		"barplot(table\$Fraction_of_reads, names.arg=table\$PrimerID_group_size, ylim=c(0,ymax), ylab=\"Fraction of Reads\", xlab=\"PrimerID Group Size (Number of Reads)\", main=\"Read Distribution by PrimerID Group for $newfilebase\", cex.main=0.9)",
 #		"library(ggplot2)",
-#		"ggplot(table, aes(x = Reads_in_PrimerID_group, y = Fraction_of_groups)) + geom_bar(stat = \"identity\")",		# Testing, so that I can add labels above the bars for the actual numbers
+#		"ggplot(table, aes(x = PrimerID_group_size, y = Fraction_of_reads)) + geom_bar(stat = \"identity\")",		# Testing, so that I can add labels above the bars for the actual numbers
 		"dev.off()"
 	);
 	

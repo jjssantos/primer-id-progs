@@ -1,4 +1,5 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 use warnings;
 $| = 1;
 
@@ -52,7 +53,8 @@ use File::Which;
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 
 my $PWD = pwd_for_hpc();
-my $mafft_bin = $PWD.'/mafft'; # philip
+#my $mafft_bin = $PWD.'/mafft'; # philip
+my $mafft_bin = 'mafft';
 
 my $save;
 my $files;

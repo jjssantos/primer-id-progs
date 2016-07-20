@@ -1,9 +1,18 @@
-#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#!/usr/bin/env perl
+#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
+#Add use lib statement to assume there is a directory at the same level as bin in which the script is run, called 'lib'
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin";
+
 use strict;
 use warnings;
 use Getopt::Long;
+use aomisc;
 
-my $BWA='/usr/local/bio_apps/bwa/bwa';
+#my $BWA='/usr/local/bio_apps/bwa/bwa';
+my $PWD = pwd_for_hpc();
+my $BWA = $PWD . "/bwa";
 
 my $p=8;						# Number of threads to use for BWA. 
 
@@ -15,8 +24,8 @@ GetOptions(\%options,
 	   'output_dir=s'
 	   );
 
-die "I need a ref file to index \n". $! if (($options{ref} eq '') || (! -e $options{ref}));
-die "I need an output_dir \n". $! if ($options{output_dir} eq '');
+die "I need a ref file to index (-ref)\n". $! if (($options{ref} eq '') || (! -e $options{ref}));
+die "I need an output_dir (-output_dir)\n". $! if ($options{output_dir} eq '');
 $options{output_dir} =~ s/\/$//;
 
 system ("mkdir $options{output_dir}") unless -e $options{output_dir};
