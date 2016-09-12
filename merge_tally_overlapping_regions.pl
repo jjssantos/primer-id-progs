@@ -75,6 +75,8 @@ OPTIONS:
 # Change log
 # 2015-06-16
 # Created script.
+# 2016-09-12
+# Modified column header lookups to match the new column headers in convert_reads_to_amino_acid.pl (instead of the columns output by add_consensus_columns_to_frequency_tables.pl)
 
 
 # To do
@@ -129,7 +131,7 @@ sub read_tally {
 	my $h_lookup = column_header_lookup_hash(\@header);
 	my $name_index 			= $h_lookup->{'name'};
 	my $cov_index 			= $h_lookup->{'coverageDepth'};
-	my $noncon_index 		= $h_lookup->{'numNonConsensus'};
+	my $noncon_index 		= $h_lookup->{'numUnambigNonConsensus'};
 	my $unambig_cov_index 	= $h_lookup->{'unambigCoverageDepth'};
 	my $pos_index = 															# aminoAcidPosition OR nucleotidePosition OR codonPosition
 		(exists($h_lookup->{aminoAcidPosition}))		? $h_lookup->{aminoAcidPosition} :

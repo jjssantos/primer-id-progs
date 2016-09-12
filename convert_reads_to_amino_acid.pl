@@ -241,6 +241,8 @@ Notes:
 # Changed mafft gap opening penalty from 1.4 to 1.3 to allow insertion to be created when necessary.
 # Remove in-frame indels from @good and put in @toss array.
 # Fix substitution for @all_codons array to work with '*' for stop codons
+# 2016-09-11
+# Add columns to output:  unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele
 
 
 unless ($ref && ($files||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
@@ -253,10 +255,13 @@ unless($files){
 	}
 }
 
-$mapq //= 0;	# zero is a valid value, hence //= ("defined or") operator.  Doesn't work in Perl 5.8.		 # Was 30
+$mapq //= 0;	
+# zero is a valid value, hence //= ("defined or") operator.  Doesn't work in Perl 5.8.		 # Was 30
+
 $baseq //= 0;	# zero is a valid value		# Was 13
 
-print STDERR "baseq: $baseq\nmapq: $mapq\n"; 	# exit;
+#print STDERR "baseq: $baseq\nmapq: $mapq\n"; 	# exit;
+
 my $save_dir = $save || Cwd::cwd();
 # print $save_dir;
 # exit;
@@ -437,7 +442,7 @@ my $merged_report_fh		= open_to_write("$merged_report");
 my $variants_fh 			= open_to_write("$variants");
 
 print $nucleotide_report_fh "#name\t";
-print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth);
+print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele);
 print $nucleotide_report_fh "\tnum"; 
 print $nucleotide_report_fh join "\tnum", @NUC, "Other";
 # print $nucleotide_report_fh "\t"; 
@@ -445,7 +450,7 @@ print $nucleotide_report_fh join "\tnum", @NUC, "Other";
 print $nucleotide_report_fh "\n";
 
 print $codon_report_fh "#name\t";
-print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth);
+print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele);		#  unambigCoverageDepth numConsensus numNonConsensus numMajorAltAllele majorAltAllele
 print $codon_report_fh "\tnum"; 
 print $codon_report_fh join "\tnum", @CODON, "Other";
 # print $codon_report_fh "\t"; 
@@ -453,7 +458,7 @@ print $codon_report_fh join "\tnum", @CODON, "Other";
 print $codon_report_fh "\n";
 
 print $amino_acid_report_fh "#name\t";
-print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth); 
+print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele); 
 print $amino_acid_report_fh "\tnum"; 
 print $amino_acid_report_fh join "\tnum", @AA, "Other";  		# Needed to add "num" before amino acids, since R converts _ to "X_" and * to "X."
 # print $amino_acid_report_fh "\t"; 
@@ -878,7 +883,7 @@ sub read_input_reads {
 	}
 	print STDERR "Location of frameshifting indels in tossed reads:\n" if ($toss_unique_count);
 	foreach my $indel (keys %$indels){
-		print STDERR "Ref_Nuc_Pos\t$indel\n";
+		print STDERR "Ref_Nuc_Pos\ttype:$indel\n";
 		foreach my $pos (sort {$a <=> $b} keys %{$indels->{$indel}}){
 			print "$pos\t$indels->{$indel}->{$pos}\n";
 		}
@@ -1202,23 +1207,65 @@ sub print_reports {
 				if ($debug){	print Dumper($cds->{$type});		}
 				if ($debug){	print Dumper($nuc_aa_codon_tally->{$type}->{$pos});	}
 			}
-			my $consensus = find_key_with_biggest_value($nuc_aa_codon_tally->{$type}->{$pos});		# Assuming there won't be a tie for most abundant
+			my $cons_with_num = find_key_with_biggest_value($nuc_aa_codon_tally->{$type}->{$pos}, 2);		# Assuming there won't be a tie for most abundant.  
+			my ($consensus,$numConsensus) = split(/, /, $cons_with_num);
 			my $diff = "";
 			$diff = "DIFF" if ($consensus ne $ref_sequence);
 			my $name = $gene.":".$pos.":".$consensus;
 			my $coverage = total(values(%{$nuc_aa_codon_tally->{$type}->{$pos}})); 
 
+			# Also compute values for columns: unambigCoverageDepth	unambigConsensus numUnambigConsensus	numUnambigNonConsensus	numMajorAltAllele	majorAltAllele
+				# unambigCoverageDepth.  Compute coverage depth for non-ambiguous residues.  For amino acid coverage, only consider regular amino acids (not *, X, or -).  For nuc, only consider A, C, T, G (not N).  For codon, only consider codons with A, C, T, and G (not codons with N).
+				# unambigConsensus.  If Consensus residue is an ambiguous residue, report the next most abundant non-ambiguous residue, otherwise, report the consensus.  
+				# numUnambigConsensus.  Report the tally number for the consensus allele.  Report '0' if the consensus is an ambiguous residue.
+				# numUnambigNonConsensus.  Sum up all residues other than the consensus allele, not including ambiguous residues.  Should be equal to unambigCoverageDepth - numUnambigConsensus.  
+				# majorAltAllele.  This is the major alternate allele (i.e., second highest count after the consensus residue, not including ambiguous characters)
+				# numMajorAltAllele.  This is the tally number for the majorAltAllele. 
+			my $unambig_residues = get_unambig_tally($nuc_aa_codon_tally->{$type}->{$pos}, $type);	 # Returns hashref with the ambiguous residues removed
+			my $unambig_coverage = total(values(%$unambig_residues));
+			my $unambig_consensus_with_num = find_key_with_biggest_value($unambig_residues, 2);
+			my ($unambig_consensus,$num_unambig_consensus) = split(/, /, $unambig_consensus_with_num);
+			my $num_unambig_nonconsensus = $unambig_coverage - $num_unambig_consensus;
+			my $tally_without_consensus = remove_one_from_tally($unambig_residues,$unambig_consensus);
+			my ($major_alt_allele,$num_major_alt_allele) = ("", 0);	# Default empty, in case there is no alternate allele.
+			if (%$tally_without_consensus){
+				# Then there are alternate allele(s)
+				my $major_alt_alleles = find_key_with_biggest_value($tally_without_consensus, 2, 1);	# returns AoA of all max alleles (will usually be an AoA with just one entry, but will have multiple entries if there is a tie for the max number)
+				my @alt_alleles;
+				my @alt_counts;
+				foreach (@$major_alt_alleles){
+					my ($alt,$count) = @$_;
+					#print STDERR "alt: $alt, $count\n";
+					push @alt_alleles, $alt;
+					push @alt_counts, $count;
+				}
+				$major_alt_allele = join ",", @alt_alleles;
+				$num_major_alt_allele  = join ",", @alt_counts;
+			}
+			
+			if ($num_unambig_nonconsensus > 0 && $verbose){
+				print STDERR "$pos, $type\n";
+				print STDERR Dumper($nuc_aa_codon_tally->{$type}->{$pos});
+				print STDERR "unambig\n";
+				print STDERR Dumper($unambig_residues);
+				print STDERR "unambig_cov: $unambig_coverage\n";
+				print STDERR "tally without consensus\n";
+				print STDERR Dumper($tally_without_consensus);
+				print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n";
+				#exit;
+			}
+
 			# Now print the counts, number of amino acids represented, ref aa counts, and nonref aa counts.
 			if ($type eq 'nuc'){
-				print $nucleotide_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage;
+				print $nucleotide_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
 				print_tally_line($nucleotide_report_fh, 	$nuc_aa_codon_tally->{$type}->{$pos}, \@NUC);
 			}
 			elsif($type eq 'codon'){
-				print $codon_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage;
+				print $codon_report_fh 		join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
 				print_tally_line($codon_report_fh, 		$nuc_aa_codon_tally->{$type}->{$pos}, \@all_codons);
 			}
 			else {
-				print $amino_acid_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage;
+				print $amino_acid_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
 				print_tally_line($amino_acid_report_fh, 	$nuc_aa_codon_tally->{$type}->{$pos}, \@AA);
 			}
 		}
@@ -1261,6 +1308,55 @@ sub print_tally_line {
 	print $writefh "\n";
 }
 #-----------------------------------------------------------------------------
+sub get_unambig_tally {
+	my ($tally_hashref, $nuc_codon_aa) = @_;
+	# Takes a hashref tally for nucleotides, codons, or amino acids (for a particular position) and removes all but the standard nucleotides, codons, and amino acids
+	# For nucleotides, only report A, C, T, G
+	# For codons, only report codons that unambiguously resolve to a known amino acid (using the %converter hash, which takes into account wobble nucleotides)	
+		# Or, should we only report codons that are made up of A, C, T, and G?
+	# For amino acids, only report qw(A C D E F G H I K L M N P Q R S T V W Y)
+	my %aa; 
+	foreach ( qw(A C D E F G H I K L M N P Q R S T V W Y) ){
+		$aa{$_} = 1;
+	}
+	my %nuc;
+	foreach ( qw(A C T G) ){
+		$nuc{$_} = 1;
+	}
+
+	my $unambig_tally_hashref;
+
+	foreach my $res (keys %$tally_hashref){
+		my $unambig = 0;	# Becomes 1 if found to be an unambiguous residue
+		if ($nuc_codon_aa eq 'nuc'){
+			$unambig++ if (exists($nuc{$res}));
+		}
+		elsif($nuc_codon_aa eq 'aa'){
+			$unambig++ if (exists($aa{$res}));
+		}
+		elsif($nuc_codon_aa eq 'codon'){
+			my $codon_to_aa = "";
+			if (exists($converter{$res})){
+				$codon_to_aa = $converter{$res};
+			}
+			$unambig++ if ($codon_to_aa && exists($aa{$codon_to_aa}));
+		}
+		$unambig_tally_hashref->{$res} = $tally_hashref->{$res} if $unambig;
+	}
+
+	return $unambig_tally_hashref;
+}
+#-----------------------------------------------------------------------------
+sub remove_one_from_tally {
+	# Takes a hashref tally for nucleotides, codons, or amino acids (for a particular position) and removes the most abundant residue
+	my ($tally_hashref,$key_to_remove) = @_;
+	my %tally_without_consensus = %$tally_hashref;  # Make a copy to modify
+
+	delete($tally_without_consensus{$key_to_remove});
+
+	return \%tally_without_consensus;
+}
+#-----------------------------------------------------------------------------
 sub print_merged_report {
 	my ($nuc_aa_codon_tally, $label) = @_;
 	# Print Reports to filehandles $nucleotide_report_fh, $codon_report_fh, and $amino_acid_report_fh
@@ -1268,7 +1364,7 @@ sub print_merged_report {
 	# $nuc_aa_codon_tally format example: $nuc_aa_codon_tally->{'aa'}->{$pos}->{$aa}++;
 	my @all_codons = @CODON;
 	for (@all_codons){
-		s/:\w+//;
+		s/:.+//;		# Was s/:\w+//;  changed to s/:.+//; for numTAA:* and others with *
 	}
 		
 	
