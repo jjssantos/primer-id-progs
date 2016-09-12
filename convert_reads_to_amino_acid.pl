@@ -442,7 +442,7 @@ my $merged_report_fh		= open_to_write("$merged_report");
 my $variants_fh 			= open_to_write("$variants");
 
 print $nucleotide_report_fh "#name\t";
-print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele);
+print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele );
 print $nucleotide_report_fh "\tnum"; 
 print $nucleotide_report_fh join "\tnum", @NUC, "Other";
 # print $nucleotide_report_fh "\t"; 
@@ -450,7 +450,7 @@ print $nucleotide_report_fh join "\tnum", @NUC, "Other";
 print $nucleotide_report_fh "\n";
 
 print $codon_report_fh "#name\t";
-print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele);		#  unambigCoverageDepth numConsensus numNonConsensus numMajorAltAllele majorAltAllele
+print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele);		#  unambigCoverageDepth numConsensus numNonConsensus numMajorAltAllele majorAltAllele
 print $codon_report_fh "\tnum"; 
 print $codon_report_fh join "\tnum", @CODON, "Other";
 # print $codon_report_fh "\t"; 
@@ -458,7 +458,7 @@ print $codon_report_fh join "\tnum", @CODON, "Other";
 print $codon_report_fh "\n";
 
 print $amino_acid_report_fh "#name\t";
-print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele); 
+print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele); 
 print $amino_acid_report_fh "\tnum"; 
 print $amino_acid_report_fh join "\tnum", @AA, "Other";  		# Needed to add "num" before amino acids, since R converts _ to "X_" and * to "X."
 # print $amino_acid_report_fh "\t"; 

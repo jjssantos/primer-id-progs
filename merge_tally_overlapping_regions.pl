@@ -110,10 +110,10 @@ my $writefh =
 	($output) ? open_to_write($output) :
 		*STDOUT;
 
-print $writefh join "\t", "sample", "name", "position", "coverageDepth", "unambigCoverageDepth", "numNonConsensus", "merged";
+print $writefh join "\t", "sample", "name", "position", "coverageDepth", "unambigCoverageDepth", "numUnambigNonConsensus", "merged";
 print $writefh "\n";
 foreach my $pos (sort {$a <=> $b} keys %$data){
-	print $writefh join "\t", $label, $data->{$pos}->{name}, $pos, $data->{$pos}->{coverageDepth}, $data->{$pos}->{unambigCoverageDepth}, $data->{$pos}->{numNonConsensus}, $data->{$pos}->{merged};
+	print $writefh join "\t", $label, $data->{$pos}->{name}, $pos, $data->{$pos}->{coverageDepth}, $data->{$pos}->{unambigCoverageDepth}, $data->{$pos}->{numUnambigNonConsensus}, $data->{$pos}->{merged};
 	print $writefh "\n";
 }
 
@@ -156,7 +156,7 @@ sub read_tally {
 		}
 		
 		$data->{$pos}->{coverageDepth} += $cov;
-		$data->{$pos}->{numNonConsensus} += $noncon;
+		$data->{$pos}->{numUnambigNonConsensus} += $noncon;
 		$data->{$pos}->{unambigCoverageDepth} += $unambig_cov;
 	}
 	

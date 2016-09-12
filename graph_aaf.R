@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Example input file
-# name	position	coverageDepth	numNonConsensus
+# name	position	coverageDepth	numUnambigNonConsensus
 # 4	4	3265	5
 # 5	5	3265	0
 # 6	6	3265	1
@@ -15,8 +15,8 @@ pdfname <- sub("[.][^.]*$", ".pdf", args[1], perl=TRUE)
 data_in <- read.delim(args[1])
 #head(data_in)
 data <- subset(data_in, unambigCoverageDepth != 0)		# To avoid dividing by zero
-#data$freqNonConsensus = data$numNonConsensus/data$coverageDepth
-data$freqNonConsensus = data$numNonConsensus/data$unambigCoverageDepth
+#data$freqNonConsensus = data$numUnambigNonConsensus/data$coverageDepth
+data$freqNonConsensus = data$numUnambigNonConsensus/data$unambigCoverageDepth
 #head(data)
 meanfreq <- mean(data$freqNonConsensus)
 medianfreq <- median(data$freqNonConsensus)
