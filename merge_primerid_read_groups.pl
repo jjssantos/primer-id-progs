@@ -178,7 +178,9 @@ OPTIONS:
 --min_freq	When calling a consensus base for a particular position, the frequency of the 
 		major base should be equal to or higher than this value.  If the value falls below
 		this threshold, the assigned base is N.  The default is to take the major base 
-		regardless of the frequency.  Suggested: value between 0.60 and 0.75.  
+		regardless of the frequency.  Suggested: value between 0.60 and 0.75.  Note that if 
+		there is a tie between two residues, an IUPAC ambiguous residue will be assigned 
+		regardless of the frequency.
 --temp_dir	Directory to use for temporary files.  Default is /tmp .
 ";
 
@@ -397,7 +399,7 @@ sub get_sample_consensus {
 	# Return consensus sequence
 	my $seq = uc( $seqobj->seq() );
 	if ($seq){
-		# Clean up intra-sample onsensus sequence	
+		# Clean up intra-sample consensus sequence	
 		$seq =~ s/^N+//ig;		# Remove any trailing Ns.  
 		$seq =~ s/N+$//ig;
 		print "Consensus seq: $seq\n";
