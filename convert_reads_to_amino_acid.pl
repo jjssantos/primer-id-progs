@@ -1243,15 +1243,15 @@ sub print_reports {
 				$num_major_alt_allele  = join ",", @alt_counts;
 			}
 			
-			if ($num_unambig_nonconsensus > 0 && $verbose){
-				print STDERR "$pos, $type\n";
+			if ($verbose){		# $num_unambig_nonconsensus > 0 && 
+				print STDERR "\n$pos, $type\n";
 				print STDERR Dumper($nuc_aa_codon_tally->{$type}->{$pos});
 				print STDERR "unambig\n";
 				print STDERR Dumper($unambig_residues);
 				print STDERR "unambig_cov: $unambig_coverage\n";
 				print STDERR "tally without consensus\n";
 				print STDERR Dumper($tally_without_consensus);
-				print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n";
+				print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n\n";
 				#exit;
 			}
 
@@ -1316,7 +1316,7 @@ sub get_unambig_tally {
 		# Or, should we only report codons that are made up of A, C, T, and G?
 	# For amino acids, only report qw(A C D E F G H I K L M N P Q R S T V W Y)
 	my %aa; 
-	foreach ( qw(A C D E F G H I K L M N P Q R S T V W Y) ){
+	foreach ( qw(A C D E F G H I K L M N P Q R S T V W Y *) ){
 		$aa{$_} = 1;
 	}
 	my %nuc;
@@ -1339,7 +1339,7 @@ sub get_unambig_tally {
 			if (exists($converter{$res})){
 				$codon_to_aa = $converter{$res};
 			}
-			$unambig++ if ($codon_to_aa && exists($aa{$codon_to_aa}));
+			$unambig++ if ($codon_to_aa && exists($aa{$codon_to_aa}));		
 		}
 		$unambig_tally_hashref->{$res} = $tally_hashref->{$res} if $unambig;
 	}

@@ -418,6 +418,9 @@ sub find_key_with_biggest_value {
 			return $hash->{$max_key};
 		}
 		elsif($with_value == 2){
+			unless ($max_key && exists($hash->{$max_key})){
+				print STDERR "ERROR: Max key or value in hash not defined.  max_key: $max_key\n" . Dumper($hash) . "\n";
+			}
 			return $max_key.", ".$hash->{$max_key};
 		}
 		else {
