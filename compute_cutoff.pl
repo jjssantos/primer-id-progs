@@ -1,12 +1,14 @@
 #!/usr/bin/env perl
 
-use lib "/nethome/oleraj/lib";
 $| = 1;
 use warnings;
 use aomisc;
 
+# This script computes the minimum reliable primerID group size.
+# Formula is based on simulation using consensus_cutoff.rb script from Zhou et al, J Virol, 2015 with 12bp primerID.
+
 my $usage = "
-compute_cutoff.pl <max primerID size>
+compute_cutoff.pl <max primerID group size in dataset>
 ";
 
 die $usage unless $ARGV[0];

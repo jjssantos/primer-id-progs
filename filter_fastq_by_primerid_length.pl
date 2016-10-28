@@ -231,7 +231,7 @@ printf STDERR "\n%i sequences with primerID\t\t%.3f", $with_primerID, $with_prim
 printf STDERR "\n%i sequences without primerID\t\t%.3f\n", $no_primerID, $no_primerID/$i;
 
 # Now print out the primer IDs with the individual counts and the read ids for each.  
-my $primerID_filename = $output_dir.$filename.'.pid.primerids';
+my $primerID_filename = $output_dir.$filename.'.primerids';
 my $writefh = open_to_write($primerID_filename, 1);			# gzip compression for second argument
 foreach my $ID (keys %$primerid_tally){
 	print $writefh "$ID\t";
