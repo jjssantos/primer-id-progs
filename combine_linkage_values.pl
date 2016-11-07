@@ -110,7 +110,7 @@ OPTIONS:
 	--prefix	Prefix for the output files.  Default = 'Linkage_plot'.
 	--keeptmp	Keep temporary files
 	-q/--quasi	Calculate quasi-cliques in network using mgqce.  Default is just to make
-			a network plot.
+			a network plot.  Requires mgqce on the PATH.
 	--mu		Mu value for mgqce.  Default 0.5.
 	--gamma		Gamma value for mgqce.  Default 0.01.
 	-s/--save	Directory in which to save files. Default = pwd.  If folder doesn't exist, 
