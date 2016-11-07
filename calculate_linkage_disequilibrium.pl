@@ -255,7 +255,7 @@ if ($label =~ m/^Sample$/ && $num_var_files > 1){
 		# If that value is > 24 hours, the script will die unless --force is also specified
 	# If no variants passing threshold are found, this sub will also kill the script.
 my ($variants_to_consider, $comparisons) = get_common_variant_list(\@variants_files);		# Get a list/hash of variants that pass the threshold in at least one replicate.  Hashref, $variants->{$type}->{$gene}->{$position}->{$variant_combined_name}++; 
-		 # print "Variants to consider: \n", Dumper($variants_to_consider), Dumper($comparisons); exit;
+		#  print "Variants to consider: \n", Dumper($variants_to_consider), Dumper($comparisons); exit;
 
 
 my $save_dir = $save || Cwd::cwd();
@@ -275,7 +275,7 @@ for (my $i = 0; $i < @variants_files; $i++){
 	print $linkage_disequil_fh "#group\tsample\ttype\tgene\tcomparison\tpos1\tc1\tv1\tv1freq\tpos2\tc2\tv2\tv2freq\tc1c2\tc1v2\tv1c2\tv1v2\tp-value\tOR\tFDR\n";		
 
 	my $variants = read_variants($variants_files[$i]);		# HoHoAoH; first keys, type, i.e., 'nuc', 'codon', 'aa'; second keys gene; array of variants; hash with keys 'frequency', 'position', 'variant', 'consensus'
-							# print Dumper($variants); exit;
+					#		 print Dumper($variants);  # exit;
 
 	# Now read the nucleotide file *cleanreads.txt into memory and get linkage for variants of type 'nuc' and 'codon'
 	my $clean_reads = get_reads($clean_reads_files[$i]);		#	print Dumper($clean_reads); exit; 
@@ -561,8 +561,9 @@ sub read_variants {
 			next unless ($filter eq "PASS");
 		}
 		my $variant_combined_name = join ":", $position, $consensus, $variant; 		# position:consensus:variant
-		next unless (exists($variants_to_consider->{$type}->{$gene}->{$variant_combined_name})); 		# Check to see that it was above threshold in at least one of the replicates
-		
+			#	print STDERR "$variant_combined_name\n";
+		next unless (exists($variants_to_consider->{$type}->{$gene}->{$position}->{$variant_combined_name})); 		# Check to see that it was above threshold in at least one of the replicates
+			#	print STDERR "\tpass\n";
 		# Store the variant info in a hash
 		my %hash = (
 			'position' => $position,
