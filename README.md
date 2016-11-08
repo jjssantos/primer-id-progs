@@ -62,15 +62,16 @@ The commands below are suggestions.  You are welcome to put them together in a s
   ```
   for i in 151_62_S1 141_64_S1 141_65_S2; do pandaseq -f ${i}_R1.fastq -r ${i}_R2.trim.fastq -F -T 8 -u ${i}_pandaseq_unaligned.fastq > ${i}.contigs.fastq; done
   ```
-  Takes 5 sec.
+  Takes 5 sec.  Note that the binary of pandaseq provided will probably not work on your system.  You will need to compile a version for your system.  I am working on making a portable version and may include this at a later date.
+  If your reads are not overlapping, you can use the `concatenate_reads.pl` script, which will reverse complement R2 and insert an appropriate number of Ns between the reads in a pair based on their alignment with the reference.
 
-5. Extract primerID from sequences
+5. Extract primerID from sequences and place in the first line of the fastq record
   ```
   for i in 151_62_S1 141_64_S1 141_65_S2; do f=${i}.contigs.fastq; filter_fastq_by_primerid_length.pl --removepost --post CA --file_in $f --n 12; done
   ```
   Takes ~1 min. each. (3 min. 30 sec. total)
 
-6. Split into barcode regions and remove primer sequences
+6. Split into amplicon regions and strip off primer sequences
   ```
   for i in 151_62_S1 141_64_S1 141_65_S2; do Btrim64 -p primers.txt -t ${i}.contigs.pid.fastq -o ${i}.contigs.pid.btrim.fastq -u 2 -v 2 -S -B -e 300; done
   ```
@@ -124,8 +125,12 @@ The commands below are suggestions.  You are welcome to put them together in a s
   ```
   Takes 5 sec.  Only one comparison.
 
-12. There are a few other steps that I haven't tested with this dataset at the moment, including `merge_overlapping_tally_regions.pl`, `combine_linkage_values.pl`, `compare_variant_frequencies.pl`, `primer_id_stats.pl`, and `graph_ambig_pos.R`.  I'll add some documentation for them at some point.  In the mean time, feel free to test them out. There is a usage statement that should describe how they are used (or you can inspect the script).
+12. There are a few other steps that I haven't tested with this dataset at the moment, including `merge_overlapping_tally_regions.pl`, `combine_linkage_values.pl`, `compare_variant_frequencies.pl`, `primer_id_stats.pl`, and `graph_ambig_pos.R`.  I'll add some documentation for them at some point.  In the mean time, feel free to test them out. There is a usage statement for most that should describe how they are used (or you can inspect the script).
 
+### Downloading the output files
+You can download the output files expected for running these commands here:
+
+https://drive.google.com/open?id=0B_uaeWUQ6aiJNFRkNkZWMl9qMzA
 
 
 
@@ -143,4 +148,4 @@ Modules to load prior to running scripts:
 
 # Todo
 * Description of scripts 
-* Tutorial
+* Additional steps in the tutorial
