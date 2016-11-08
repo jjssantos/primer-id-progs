@@ -35,7 +35,7 @@ export MAFFT_BINARIES=/path/to/primer-id-progs/mafft-7.221/libexec/mafft
 Some of the scripts use R as well, so be sure to have R and Rscript on your PATH.   This has been tested with R 3.2.3.  One required library is the 'network' package.
 
 
-### Running the PrimerID pipeline
+### Running the PrimerID workflow
 The commands below are suggestions.  You are welcome to put them together in a shell script, or submit them on a cluster as you please.  In fact, it is recommended to run many of these on a cluster.  This small dataset has about 1000 primerID groups per amplicon (1000 primerID groups * 4 amplicons per dataset = 4000 primerID groups total approximately), so these jobs run relatively quickly compared to a full dataset, which may have 10s or 100s of thousands of primerID groups.  For full datasets, it is recommended to run jobs in parallel on a cluster (one amplicon per job).  Many of the scripts are parallelized to use multiple threads.  The usage statement may give a recommended number of threads to try, usually 8-12.
 
 1. Trim first 4bp of R2 reads.  
