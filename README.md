@@ -133,7 +133,7 @@ You can download the output files expected for running these commands here:
 https://drive.google.com/open?id=0B_uaeWUQ6aiJNFRkNkZWMl9qMzA
 
 # Software terms of use
-Use of this software prior to publication constitutes a collaboration. Please see Chris Brooke who has a copy of the terms of use.
+Use of this software prior to publication constitutes a collaboration. Please see Chris Brooke who has a copy of the terms of use.  Use and distribution of the external dependencies is subject to their respective licenses.
 
 
 # Notes for running on Locus.
