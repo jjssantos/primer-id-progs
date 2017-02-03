@@ -96,9 +96,7 @@ The commands below are suggestions.  You are welcome to put them together in a s
   for i in 151_62_S1 141_64_S1 141_65_S2; do for sample in ${i}.contigs.pid.btrim.*.majority.bam; do a=${sample/.majority.bam/}; merge_primerid_read_groups.pl --plot_only --plot_counts $sample; done; done
   ```
   Takes 29 sec.
-  ```
-  for i in 151_62_S1 141_64_S1 141_65_S2; do for sample in ${i}.contigs.pid.btrim.*.majority.bam; do a=${sample/.majority.bam/}; groups=${a}.majority.group.counts.txt; cutoff=$(compute_cutoff.pl $(cat $groups | tail -n 1 | cut -f 1)); echo merge_primerid_read_groups.pl -m $cutoff --ambig 600 --min_freq 0.75 -p 8 $sample; done; done
-  ```
+  
   The \*majority.group.counts.txt files are required input to the `compute_cutoff.pl` script, in order to determine the minimum PrimerID group size.  There is a default minimum of 5 (this can be modified; suggested 3 to 5), and the script will calculate a statistical minimum based on the maximum group size.  In this case, you should see a minimum of 5 for all except 141_65_S2.contigs.pid.btrim.2.majority.bam will have a computed minimum of 6.
 
   ```
