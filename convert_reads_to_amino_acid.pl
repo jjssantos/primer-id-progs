@@ -11,6 +11,8 @@ use lib "$FindBin::Bin";
 use strict;
 use FileHandle;
 use aomisc;
+use primerid;
+
 use Cwd;
 use diagnostics; 
 use Getopt::Long;
@@ -57,30 +59,45 @@ my $PWD = pwd_for_hpc();
 my $mafft_bin = 'mafft';
 
 my $save;
-my $files;
+my $input;
 my $verbose;
 my $output;
 my $gzip;
-my $baseq;
-my $mapq;
 my $ref;
-my $gff;
-my $label;
+my $label = "Sample_1";	# Default sample label
 my $debug;
 my $fullpeptide;
-my $prefix;
-my $variant_threshold;
+my $prefix = 'Convert_reads';	# Default output prefix
+my $variant_threshold = 0;	# Default threshold is 0.
 my $alignment_length;
 my $cpu = 1; 
 my $clustalw;
-GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'baseq=s' => \$baseq, 'mapq=s' => \$mapq, 'ref=s' => \$ref, 'r=s' => \$ref, 'gff=s' => \$gff, 'label=s' => \$label, 'labels=s' => \$label, 'debug' => \$debug, 'fullpeptide=s' => \$fullpeptide, 'prefix=s' => \$prefix, 'variant_threshold=s' => \$variant_threshold, 'alignment_length=s' => \$alignment_length, 'cpu=s' => \$cpu, 'p=s' => \$cpu, 'clustalw' => \$clustalw);
+my $help;
+GetOptions(
+	's|save=s' => \$save, 
+	'output=s' => \$output, 
+	'verbose' => \$verbose, 
+	'i|input|files=s' => \$input, 	# keeping "files" for backwards compatibility
+	'gzip' => \$gzip, 
+	'ref=s' => \$ref, 
+	'r=s' => \$ref, 
+	'l|label=s' => \$label, 
+	'debug' => \$debug, 
+	'fullpeptide=s' => \$fullpeptide, 
+	'prefix=s' => \$prefix, 
+	'variant_threshold=s' => \$variant_threshold, 
+	'alignment_length=s' => \$alignment_length, 
+	'cpu|p=s' => \$cpu, 
+	'clustalw' => \$clustalw,
+	'h|help'	=> \$help,
+);
 
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
 #-----------------------------------------------------------------------------
 
 my $usage = "
-convert_reads_to_amino_acid.pl takes one or more fasta files (e.g., sequencing reads), 
+convert_reads_to_amino_acid.pl takes a fasta file (e.g., sequencing reads), 
 compares to a reference coding sequence and outputs frequency tables of nucleotide, 
 codon, and amino acid sequence by position.  A merged table containing frequencies for 
 all three is also produced, as well as phylip files for nucleotide and peptide sequence.  
@@ -103,15 +120,14 @@ Parallel::Loops
 
 
 Required Arguments:
---files 	Input file(s), comma-delimited.  One fasta file per sample.  Required.
+-i/--input 	Input file, comma-delimited.  Required.
 -r/--ref	Reference coding (CDS) sequence fasta file.  Required.  Used to determine 
 		translation frame of reference.
 
 Optional Arguments:
---label		Name(s) for sample(s), comma-delimited (no spaces) in the order in which 
-		they were input into --files. Default: Sample_1,Sample_2, etc.
+-l/--label		Name for sample.  Default: Sample_1
 --prefix	Prefix for output files.  Default = Convert_reads
---save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
+-s/--save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
 		will be created.
 -p/--cpu	Number of processors to use. Default = 1.
 --clustalw	Use clustalw to run alignments. Default is to use mafft.  *Executables must be 
@@ -125,10 +141,15 @@ Optional Arguments:
 		there is an option to filter for a variant_threshold as well.)
 
 Example:
-convert_reads_to_amino_acid.pl --files 30_S1.contigs.pid.btrim.0.majority.cons.fasta --ref CAL0409_HA_cds.fa --label 30_S1 --prefix 30_S1.contigs.pi.btrim.0.majority.cons -p 7
+convert_reads_to_amino_acid.pl --input 30_S1.contigs.pid.btrim.0.majority.cons.fasta \
+--ref CAL0409_HA_cds.fa --label 30_S1 --prefix 30_S1.contigs.pi.btrim.0.majority.cons -p 7
 
 Notes:
-1. Recommended h_vmem (RAM) value per thread is 6G, although it may be fine with less, depending on the size and complexity of your input file. 
+1. Recommended h_vmem (RAM) value per thread is 6G, although it may be fine with less, 
+	depending on the size and complexity of your input file. 
+2. If running more than 20,000 sequences, it is recommended to split the file and run each
+	separately,	saving the output into a separate directory, then merging the results with 
+	merge_tally.pl.
 ";
 
 
@@ -157,6 +178,8 @@ Notes:
 # Change --fasta to --ref
 # Maybe let BAM be an option as input... (keep read_bam and some other subroutines that work with bam files)
 # Maybe let FASTQ be an option as input too/instead?
+# Allow user to specify temp directory instead of using /tmp/
+
 
 # Change log
 # 2013-01-15
@@ -243,24 +266,15 @@ Notes:
 # Fix substitution for @all_codons array to work with '*' for stop codons
 # 2016-09-11
 # Add columns to output:  unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus numMajorAltAllele majorAltAllele
+# 2017-02-05
+# Removing parse_gff subroutine (deprecated) to module gff_utils.pm
+# Removing the ability to input multiple fasta files since I never use that feature, and it allows me to simplify the code
+# Resulting simplifications: 
+#	1. Move global variables to subroutines, including filehandles for output files (tally.xls, variants, etc.)
+#	2. Move some subroutines to module primerid.pm so they can be used by merge_tally.pl as well.
 
 
-unless ($ref && ($files||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
-unless($files){	
-	if (scalar(@ARGV)>1){	#This will allow you to use wildcard to pass files to the script from the command line. e.g, script.pl *.txt, and it will run through each.
-		$files = join ",", @ARGV;
-	}
-	else{
-		$files = $ARGV[0];	
-	}
-}
-
-$mapq //= 0;	
-# zero is a valid value, hence //= ("defined or") operator.  Doesn't work in Perl 5.8.		 # Was 30
-
-$baseq //= 0;	# zero is a valid value		# Was 13
-
-#print STDERR "baseq: $baseq\nmapq: $mapq\n"; 	# exit;
+unless ($ref && ($input||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 
 my $save_dir = $save || Cwd::cwd();
 # print $save_dir;
@@ -269,27 +283,20 @@ unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
 # warn "save directory: $save_dir\n";
 
 my $start_time = time;
-my @files = &aomisc::get_files($files);		#If allowing a directory, specify extension of the files in second argument, e.g., my @files = &get_files($files, 'bed');
-my @suffixes = (qw(.bed .bed.gz .bed12 .bed12.gz .txt .txt.gz .BED .BED.gz .BED12 .BED12.gz .fasta .fa .FA .FASTA .FAS .fas), @SUFFIXES);	#for fileparse.  Feel free to add more accepted extensions.  @SUFFIXES comes from aomisc.pm.  
 
-my @labels;
-if ($label){
-	@labels = split (/,/, $label);
-}
-else {
-	for (my $i = 1; $i < (scalar(@files)+1); $i++){
-		push @labels, "Sample_".$i;
-	}
+if ($label =~ m/,/){
+	print STDERR "Please input a single fasta file.\n";
+	exit; 
 }
 
-# Defaults for input options
-$prefix ||= 'Convert_reads';
-$variant_threshold //= 0;		# Was 0.0001 (1 variant out of 10000 sequences).  0 is a valid value, hence // instead of ||.
+
+# Make hash to convert codons to amino acids (maybe this should go into primerid.pm too?)
+
+my %converter = make_codon_to_aa_hash();
 
 
-# Get reference sequence
-
-my ($refseq,$gene);		# Reference coding nucleotide sequence
+# Get reference sequence from fasta file
+my ($refseq,$gene);		# Reference coding nucleotide sequence (actual sequence), and gene name
 if ($ref){
 	my $in = Bio::SeqIO->new(-file => $ref , -format => 'Fasta' );		# There should only be one sequence in this file, so it should be the first.   # This conflicts with the Bioperl module
 	my $seq = $in->next_seq();
@@ -298,118 +305,11 @@ if ($ref){
 					if ($verbose){	print "refseq:\n$gene\n$refseq\n";	}
 }
 
-my %converter = (		# Modified from http://www.wellho.net/resources/ex.php4?item=p212/3to3
-    'TCA' => 'S', # Serine
-    'TCC' => 'S', # Serine
-    'TCG' => 'S', # Serine
-    'TCT' => 'S', # Serine
-    'TCN' => 'S', # Serine wobble
-    'TTC' => 'F', # Phenylalanine
-    'TTT' => 'F', # Phenylalanine
-    'TTY' => 'F', # Phenylalanine ambiguous C or T
-    'TTA' => 'L', # Leucine
-    'TTG' => 'L', # Leucine
-    'TTR' => 'L', # Leucine ambiguous A or G
-    'TAC' => 'Y', # Tyrosine
-    'TAT' => 'Y', # Tyrosine
-    'TAY' => 'Y', # Tyrosine ambiguous C or T
-    'TAA' => '*', # Stop
-    'TAG' => '*', # Stop
-    'TGC' => 'C', # Cysteine
-    'TGT' => 'C', # Cysteine
-    'TGY' => 'C', # Cysteine ambiguous C or T
-    'TGA' => '*', # Stop (or Selenocysteine, U)
-    'TGG' => 'W', # Tryptophan
-    'CTA' => 'L', # Leucine
-    'CTC' => 'L', # Leucine
-    'CTG' => 'L', # Leucine
-    'CTT' => 'L', # Leucine
-    'CTN' => 'L', # Leucine	wobble
-    'CCA' => 'P', # Proline
-    'CCC' => 'P', # Proline
-    'CCG' => 'P', # Proline
-    'CCT' => 'P', # Proline
-    'CCN' => 'P', # Proline wobble
-    'CAC' => 'H', # Histidine
-    'CAT' => 'H', # Histidine
-    'CAY' => 'H', # Histidine ambiguous C or T
-    'CAA' => 'Q', # Glutamine
-    'CAG' => 'Q', # Glutamine
-    'CAR' => 'Q', # Glutamine ambiguous A or G
-    'CGA' => 'R', # Arginine
-    'CGC' => 'R', # Arginine
-    'CGG' => 'R', # Arginine
-    'CGT' => 'R', # Arginine
-    'CGN' => 'R', # Arginine wobble
-    'ATA' => 'I', # Isoleucine
-    'ATC' => 'I', # Isoleucine
-    'ATT' => 'I', # Isoleucine
-    'ATH' => 'I', # Isoleucine ambiguous A or C or T
-    'ATM' => 'I', # Isoleucine ambiguous A or C
-    'ATW' => 'I', # Isoleucine ambiguous A or T
-    'ATY' => 'I', # Isoleucine ambiguous C or T
-    'ATG' => 'M', # Methionine
-    'ACA' => 'T', # Threonine
-    'ACC' => 'T', # Threonine
-    'ACG' => 'T', # Threonine
-    'ACT' => 'T', # Threonine
-    'ACN' => 'T', # Threonine wobble
-    'AAC' => 'N', # Asparagine
-    'AAT' => 'N', # Asparagine
-    'AAY' => 'N', # Asparagine ambiguous C or T
-    'AAA' => 'K', # Lysine
-    'AAG' => 'K', # Lysine
-    'AAR' => 'K', # Lysine ambiguous A or G
-    'AGC' => 'S', # Serine
-    'AGT' => 'S', # Serine
-    'AGY' => 'S', # Serine ambiguous C or T
-    'AGA' => 'R', # Arginine
-    'AGG' => 'R', # Arginine
-    'AGR' => 'R', # Arginine ambiguous A or G
-    'GTA' => 'V', # Valine
-    'GTC' => 'V', # Valine
-    'GTG' => 'V', # Valine
-    'GTT' => 'V', # Valine
-    'GTN' => 'V', # Valine wobble
-    'GCA' => 'A', # Alanine
-    'GCC' => 'A', # Alanine
-    'GCG' => 'A', # Alanine
-    'GCT' => 'A', # Alanine
-    'GCN' => 'A', # Alanine wobble
-    'GAC' => 'D', # Aspartic Acid
-    'GAT' => 'D', # Aspartic Acid
-    'GAY' => 'D', # Aspartic Acid ambiguous C or T
-    'GAA' => 'E', # Glutamic Acid
-    'GAG' => 'E', # Glutamic Acid
-    'GAR' => 'E', # Glutamic Acid ambigous A or G
-    'GGA' => 'G', # Glycine
-    'GGC' => 'G', # Glycine
-    'GGG' => 'G', # Glycine
-    'GGT' => 'G', # Glycine
-    'GGN' => 'G', # Glycine wobble
-    );
-# Add constituent ambiguous characters in place of N as well.  
-my @iupac_ambig_nuc = (qw(R Y S W K M B D H V));	# http://www.bioinformatics.org/sms/iupac.html
-foreach my $codon (keys %converter){
-	if ($codon =~ m/N$/){
-		foreach my $ambig (@iupac_ambig_nuc){
-			my $new_codon = $codon;
-			$new_codon =~ s/N$/$ambig/;	# Replace N for the ambiguous nucleotide
-			$converter{$new_codon} = $converter{$codon};	# Assign the amino acid value to the same aa as the codon ending in N
-		}
-	}
-}
-
-# Parse GFF file to get start and stop, and translated ORF
-my $genes;
-#$genes = parse_gff($gff);
-
-# Instead of parsing GFF, use the reference CDS sequence to get the coding nucleotides, codons, and amino acids by position.
+# Use the reference CDS sequence to store the coding nucleotides, codons, and amino acids by position.
 my $cds; 
 $cds = get_cds_sequences($refseq); 
 
-#		print Dumper($genes); exit;
-
+# Make global arrays of nucleotides, amino acids, and codons
 my @NUC = qw(A C G T N);
 my @AA = qw(A C D E F G H I K L M N P Q R S T V W Y * X -); 	# All amino acids, and * for stop, X for unknown, and - for deletion in read compared to reference
 my @CODON;
@@ -427,83 +327,27 @@ foreach my $aa (@AA){		# Make the codons in the report in the same order as the 
 
 #			print join " ", @CODON; print "\n"; exit;
 
-# Parse the BAM files and print reports
-
-my $nucleotide_report 	= $save_dir . "/" . $prefix . ".nuc.tally.xls";
-my $codon_report 		= $save_dir . "/" . $prefix . ".codon.tally.xls";
-my $amino_acid_report 	= $save_dir . "/" . $prefix . ".aa.tally.xls";
-my $merged_report 		= $save_dir . "/" . $prefix . ".merged.tally.xls";
-my $variants			= $save_dir . "/" . $prefix . ".variants.minfreq".$variant_threshold.".xls";		# Maybe add threshold to the name.  Or in the header of the file.
-
-my $nucleotide_report_fh 	= open_to_write("$nucleotide_report");
-my $codon_report_fh 		= open_to_write("$codon_report");
-my $amino_acid_report_fh 	= open_to_write("$amino_acid_report");
-my $merged_report_fh		= open_to_write("$merged_report");
-my $variants_fh 			= open_to_write("$variants");
-
-print $nucleotide_report_fh "#name\t";
-print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele );
-print $nucleotide_report_fh "\tnum"; 
-print $nucleotide_report_fh join "\tnum", @NUC, "Other";
-# print $nucleotide_report_fh "\t"; 
-# print $nucleotide_report_fh join "\t", qw(del SumACGT numNonzeroACGT Ref Nonref percentNonref);
-print $nucleotide_report_fh "\n";
-
-print $codon_report_fh "#name\t";
-print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele);		#  unambigCoverageDepth numConsensus numNonConsensus numMajorAltAllele majorAltAllele
-print $codon_report_fh "\tnum"; 
-print $codon_report_fh join "\tnum", @CODON, "Other";
-# print $codon_report_fh "\t"; 
-# print $codon_report_fh join "\t", qw(del SumACGT numNonzeroACGT Ref Nonref percentNonref);		# Maybe syn, nonsyn; or maybe save that for the summary report.  
-print $codon_report_fh "\n";
-
-print $amino_acid_report_fh "#name\t";
-print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele); 
-print $amino_acid_report_fh "\tnum"; 
-print $amino_acid_report_fh join "\tnum", @AA, "Other";  		# Needed to add "num" before amino acids, since R converts _ to "X_" and * to "X."
-# print $amino_acid_report_fh "\t"; 
-# print $amino_acid_report_fh join "\t", qw(SumKnownAminoAcids numNonzeroKnownAminoAcids Ref Nonref percentNonref);
-print $amino_acid_report_fh "\n"; 
-
-print $merged_report_fh "#name\t";
-print $merged_report_fh join "\t", qw(gene nucleotidePosition positionWithinCodon refNucleotide consensusNucleotide refDiffConsensus aminoAcidPosition refCodon consensusCodon refAminoAcid consensusAminoAcid Sample coverageDepth); 
-foreach my $type (qw(Nucleotide Codon AminoAcid)){
-	foreach my $rank (qw(top second third other)){
-		print $merged_report_fh "\t$rank"."$type";		#topNucleotide secondNucleotide otherNucleotide countTopNucleotide countSecondNucleotide
-	}
-	foreach my $rank (qw(top second third other)){
-		print $merged_report_fh "\tcount".ucfirst($rank)."$type";
-	}
-}
-print $merged_report_fh "\n";		#	#name	chr	gene	nucleotidePosition	aminoAcidPosition	refAminoAcid	consensusAminoAcid	Sample	coverageDepth	topNucleotide	secondNucleotide	thirdNucleotide	otherNucleotide	countTopNucleotide	countSecondNucleotide	countThirdNucleotide	countOtherNucleotide	topCodon	secondCodon	thirdCodon	otherCodon	countTopCodon	countSecondCodon	countThirdCodon	countOtherCodon	topAminoAcid	secondAminoAcid	thirdAminoAcid	otherAminoAcid	countTopAminoAcid	countSecondAminoAcid	countThirdAminoAcid	countOtherAminoAcid
+# Parse the files and print reports
 
 
-print $variants_fh "## Variants above threshold frequency $variant_threshold\n";
-print $variants_fh "#Type\tgene\tposition\tconsensus\tvariant\tcount\tcoverage\tfrequency\tfilter\n";
 
 
-for (my $i = 0; $i < @files; $i++){
-	my $file = $files[$i];
-	
-	my $unique_seqs_file = get_unique_seqs($file);
-	my $nuc_aa_codon_tally = read_input_reads($unique_seqs_file);
-#			print Dumper($nuc_aa_codon_tally); exit;
-	print_reports($nuc_aa_codon_tally, $labels[$i]);		
-	print_merged_report($nuc_aa_codon_tally, $labels[$i]);	
-	print_variants($nuc_aa_codon_tally, $labels[$i]);
-}
+my $unique_seqs_file = get_unique_seqs($input);
+
+my $nuc_aa_codon_tally = read_input_reads($unique_seqs_file);
+	#			print Dumper($nuc_aa_codon_tally); exit;
+print_reports($nuc_aa_codon_tally, $label, $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $save_dir, $prefix, $verbose, $debug);		
+
+print_merged_report($nuc_aa_codon_tally, $label, $gene, \@CODON, $cds, $save_dir, $prefix);	
+
+print_variants($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $save_dir, $prefix, $start_time, $verbose);
 
 
-close($nucleotide_report_fh);
-close($codon_report_fh);
-close($amino_acid_report_fh);
-close($merged_report_fh);
-close($variants_fh);
+
 
 &elapsed($start_time, 'Total', $verbose);
 #-----------------------------------------------------------------------------
 #---------------------------------- SUBS -------------------------------------
-#-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
 sub get_unique_seqs {
 	my $file = shift;
@@ -524,11 +368,11 @@ sub get_unique_seqs {
 	# The id has seq number - count ; it's sorted by most common to least common sequence
 
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
-#	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
+	#	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	my $unique_seqs_fasta = $save_dir . "/$filename" . ".uniq" . $ext; 		# Make it a real file, not a temp file
 	
-#	my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
-#	if ($check_for_fasta_collapser){
+	#my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
+	#if ($check_for_fasta_collapser){
 		# Found fasta_collapser.pl
 		print STDERR "Saving unique sequences to $unique_seqs_fasta\n";
 		my $cmd = $PWD."/fasta_collapser.pl -i $file -o $unique_seqs_fasta";
@@ -580,7 +424,7 @@ sub read_input_reads {
 		my $tempdir = File::Temp->newdir( "/tmp/temp_dir_seq_".$count."_XXXXXXXX" );		# CLEANUP => 0 
 		my $temp_fasta = $tempdir."/temp.fa";
 		my $temp_aln 	= $tempdir."/temp.aln";
-#		my $temp_aln 	= "temp.aln";
+	#		my $temp_aln 	= "temp.aln";
 		my $fh = open_to_write($temp_fasta, 0, 0, 1);
 		print $fh ">ref\n$refseq\n>read ". $seq->display_id(). "\n".$seq->seq()."\n";
 		close($fh);
@@ -597,24 +441,24 @@ sub read_input_reads {
 	#		my $aln = $factory->align("$temp_fasta"); 	# $aln is a SimpleAlign object.  http://search.cpan.org/~cjfields/BioPerl-1.6.901/Bio/SimpleAlign.pm.  
 
 			my $cmd = "$mafft_bin --quiet --thread $cpu --op 1.3 $temp_fasta  > $temp_aln";		# Default gap opening penalty 1.53 is a little too stringent sometimes.  e.g., 
-#>Seq12_part
-#TTCGAAAGATTCAAAATATTT CCC AAA GAA AGC TCA TGG CCC GACCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
-#>GGAAAGACGG
-#TTCGAAAGATTCAAAATATTT CCC AAA AA AGC TCA TGG GCCC GACCACAACACAAACGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCNNNNNNNTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
-								if ($debug){	print STDERR "Running command: $cmd\n";		} 
-# Was --op 1.4, changing to 1.3 because sometimes 1.4 is even too stringent, e.g., 
-#>HA
-#ATGAAGGCAAACCTACTGGTCCTGTTATGTGCACTTGCAGCTGCAGATGCAGACACAATATGTATAGGCTACCATGCGAACAATTCAACCGACACTGTTGACACAGTACTCGAGAAGAATGTGACAGTGACACACTCTGTTAACCTGCTCGAAGACAGCCACAACGGAAAACTATGTAGATTAAAAGGAATAGCCCCACTACAATTGGGGAAATGTAACATCGCCGGATGGCTCTTGGGAAACCCAGAATGCGACCCACTGCTTCCAGTGAGATCATGGTCCTACATTGTAGAAACACCAAACTCTGAGAATGGAATATGTTATCCAGGAGATTTCATCGACTATGAGGAGCTGAGGGAGCAATTGAGCTCAGTGTCATCATTCGAAAGATTCGAAATATTTCCCAAAGAAAGCTCATGGCCCAACCACAACACAAACGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAGCAGTTTTTACAGAAATTTGCTATGGCTGACGGAGAAGGAGGGCTCATACCCAAAGCTGAAAAATTCTTATGTGAACAAAAAAGGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAGAGATCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTCGCACTGAGTAGAGGCTTTGGGTCCGGCATCATCACCTCAAACGCATCAATGCATGAGTGTAACACGAAGTGTCAAACACCCCTGGGAGCTATAAACAGCAGTCTCCCTTACCAGAATATACACCCAGTCACAATAGGAGAGTGCCCAAAATACGTCAGGAGTGCCAAATTGAGGATGGTTACAGGACTAAGGAACATTCCGTCCATTCAATCCAGAGGTCTATTTGGAGCCATTGCCGGTTTTATTGAAGGGGGATGGACTGGAATGATAGATGGATGGTATGGTTATCATCATCAGAATGAACAGGGATCAGGCTATGCAGCGGATCAAAAAAGCACACAAAATGCCATTAACGGGATTACAAACAAGGTGAACACTGTTATCGAGAAAATGAACATTCAATTCACAGCTGTGGGTAAAGAATTCAACAAATTAGAAAAAAGGATGGAAAATTTAAATAAAAAAGTTGATGATGGATTTCTGGACATTTGGACATATAATGCAGAATTGTTAGTTCTACTGGAAAATGAAAGGACTCTGGATTTCCATGACTCAAATGTGAAGAATCTGTATGAGAAAGTAAAAAGCCAATTAAAGAATAATGCCAAAGAAATCGGAAATGGATGTTTTGAGTTCTACCACAAGTGTGACAATGAATGCATGGAAAGTGTAAGAAATGGGACTTATGATTATCCCAAATATTCAGAAGAGTCAAAGTTGAACAGGGAAAAGGTAGATGGAGTGAAATTGGAATCAATGGGGATCTATCAGATTCTGGCGATCTACTCAACTGTCGCCAGTTCACTGGTGCTTTTGGTCTCCCTGGGGGCAATCAGTTTCTGGATGTGTTCTAATGGATCTTTGCAGTGCAGAATATGCATCTGA
-#>1572-1
-#CCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTCGCACTGAGTAGAGGCTTTGGGTCCGGCATCATCACCTCAAACGCATCAATGCATGAGTGTAACACGAAGTGTCAAACACCCTGGGAG
-# With 1.4 no gap introduced:
-#HA              atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacacccctggga
-#1572-1          atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacaccctgggag
-#                ******************************************************. **..
-# With 1.3, gap is introduced:
-#HA              atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacacccctggga
-#1572-1          atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaaca-ccctggga
-#                *************************************************** ********
+	#>Seq12_part
+	#TTCGAAAGATTCAAAATATTT CCC AAA GAA AGC TCA TGG CCC GACCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
+	#>GGAAAGACGG
+	#TTCGAAAGATTCAAAATATTT CCC AAA AA AGC TCA TGG GCCC GACCACAACACAAACGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCNNNNNNNTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTC
+									if ($debug){	print STDERR "Running command: $cmd\n";		} 
+	# Was --op 1.4, changing to 1.3 because sometimes 1.4 is even too stringent, e.g., 
+	#>HA
+	#ATGAAGGCAAACCTACTGGTCCTGTTATGTGCACTTGCAGCTGCAGATGCAGACACAATATGTATAGGCTACCATGCGAACAATTCAACCGACACTGTTGACACAGTACTCGAGAAGAATGTGACAGTGACACACTCTGTTAACCTGCTCGAAGACAGCCACAACGGAAAACTATGTAGATTAAAAGGAATAGCCCCACTACAATTGGGGAAATGTAACATCGCCGGATGGCTCTTGGGAAACCCAGAATGCGACCCACTGCTTCCAGTGAGATCATGGTCCTACATTGTAGAAACACCAAACTCTGAGAATGGAATATGTTATCCAGGAGATTTCATCGACTATGAGGAGCTGAGGGAGCAATTGAGCTCAGTGTCATCATTCGAAAGATTCGAAATATTTCCCAAAGAAAGCTCATGGCCCAACCACAACACAAACGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAGCAGTTTTTACAGAAATTTGCTATGGCTGACGGAGAAGGAGGGCTCATACCCAAAGCTGAAAAATTCTTATGTGAACAAAAAAGGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAGAGATCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTCGCACTGAGTAGAGGCTTTGGGTCCGGCATCATCACCTCAAACGCATCAATGCATGAGTGTAACACGAAGTGTCAAACACCCCTGGGAGCTATAAACAGCAGTCTCCCTTACCAGAATATACACCCAGTCACAATAGGAGAGTGCCCAAAATACGTCAGGAGTGCCAAATTGAGGATGGTTACAGGACTAAGGAACATTCCGTCCATTCAATCCAGAGGTCTATTTGGAGCCATTGCCGGTTTTATTGAAGGGGGATGGACTGGAATGATAGATGGATGGTATGGTTATCATCATCAGAATGAACAGGGATCAGGCTATGCAGCGGATCAAAAAAGCACACAAAATGCCATTAACGGGATTACAAACAAGGTGAACACTGTTATCGAGAAAATGAACATTCAATTCACAGCTGTGGGTAAAGAATTCAACAAATTAGAAAAAAGGATGGAAAATTTAAATAAAAAAGTTGATGATGGATTTCTGGACATTTGGACATATAATGCAGAATTGTTAGTTCTACTGGAAAATGAAAGGACTCTGGATTTCCATGACTCAAATGTGAAGAATCTGTATGAGAAAGTAAAAAGCCAATTAAAGAATAATGCCAAAGAAATCGGAAATGGATGTTTTGAGTTCTACCACAAGTGTGACAATGAATGCATGGAAAGTGTAAGAAATGGGACTTATGATTATCCCAAATATTCAGAAGAGTCAAAGTTGAACAGGGAAAAGGTAGATGGAGTGAAATTGGAATCAATGGGGATCTATCAGATTCTGGCGATCTACTCAACTGTCGCCAGTTCACTGGTGCTTTTGGTCTCCCTGGGGGCAATCAGTTTCTGGATGTGTTCTAATGGATCTTTGCAGTGCAGAATATGCATCTGA
+	#>1572-1
+	#CCACAACACAACCGGAGTAACGGCAGCATGCTCCCATGAGGGGAAAAACAGTTTTTACAGAAATTTGCTATGGCTGACGAAGAAGGAGAGCTCATACCCAGAGCTGAAAAATTCTTATGTGAACAAAAAAAGGAAAGAAGTCCTTGTACTGTGGGGTATTCATCACCCGCCTAACAGTAAGGAACAACAGAATCTCTATCAGAATGAAAATGCTTATGTCTCTGTAGTGACTTCAAATTATAACAGGAGATTTACCCCGGAAATAGCAGAAAGACCCAAAGTAAAAGGTCAAGCTGGGAGGATGAACTATTACTGGACCTTGCTAAAACCCGGAGACACAATAATATTTGAGGCAAATGGAAATCTAATAGCACCAATGTATGCTTTCGCACTGAGTAGAGGCTTTGGGTCCGGCATCATCACCTCAAACGCATCAATGCATGAGTGTAACACGAAGTGTCAAACACCCTGGGAG
+	# With 1.4 no gap introduced:
+	#HA              atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacacccctggga
+	#1572-1          atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacaccctgggag
+	#                ******************************************************. **..
+	# With 1.3, gap is introduced:
+	#HA              atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaacacccctggga
+	#1572-1          atcatcacctcaaacgcatcaatgcatgagtgtaacacgaagtgtcaaaca-ccctggga
+	#                *************************************************** ********
 
 			system($cmd);
 			my $aln_in = Bio::AlignIO->new(
@@ -633,11 +477,11 @@ sub read_input_reads {
 		# Get a matrix to represent gaps in the alignment. 
 		my $gap_char = "-";		# dash as default, for mafft alignment output
 		$gap_char = "." if ($clustalw);	# gaps are represented by '.' in clustalw alignment output.  
-#		my $mat = $aln->gap_col_matrix($gap_char);		# This makes an AoH where each position of the array represents a position in the alignment and the keys of the hash are sequence ids, with value of 1 if there is gap at this position or '' if no gap.  (Not using...)
-#								if ($verbose){	print STDERR "gap mat:\n";		print STDERR Dumper($mat);	}
+	#		my $mat = $aln->gap_col_matrix($gap_char);		# This makes an AoH where each position of the array represents a position in the alignment and the keys of the hash are sequence ids, with value of 1 if there is gap at this position or '' if no gap.  (Not using...)
+	#								if ($verbose){	print STDERR "gap mat:\n";		print STDERR Dumper($mat);	}
 
 		# Walk through the alignment column by column, starting at the first base of the read in the alignment
-#		my $len = $aln->length();
+	#		my $len = $aln->length();
 		my $start = $aln->column_from_residue_number("read", 1);	# Get position of the beginning of the read in the alignment.
 		my $read_length = length($seq->seq() );
 		my $end   = $aln->column_from_residue_number("read", $read_length);	# Get position of the end of the read in the alignment.
@@ -649,7 +493,7 @@ sub read_input_reads {
 		my @frameshift_positions;	# Array of arrays to store the positions where frameshift occurs (for when we hit a stop, to know when the last frameshift began).  Each element is an array [$position, type] where type is 'insertion_in_read' or 'deletion_in_read'.  Each entry represents the initial position that the read sequence goes out of frame; e.g., if there is a 2bp insertion, there will only be an entry for the first base position, but not for the second base.  Position is $ref_nuc_pos, not read_nuc_pos.  (should it be read_nuc_pos?)
 		my $ref_codon;		# Used to get reference codons for translation
 		my $read_codon;		# will be used to get codon as three nucleotides become available.  flushed after translating and storing.  Only add to it once partial_codon_bases_left is at zero.
-#		my ($ref_gaps,$read_gaps) = (0,0);	# Count the number of gaps in the aligned region (in either the read or the reference).  Used to get the nuc_pos with respect to the reference sequence 
+	#		my ($ref_gaps,$read_gaps) = (0,0);	# Count the number of gaps in the aligned region (in either the read or the reference).  Used to get the nuc_pos with respect to the reference sequence 
 		
 		my $seq_info; # HoH hashref with first level keys 'nuc', 'codon', 'aa', 'frameshift_positions', 'type', 'full_seqs'; second level keys are positions with value as the base, codon, or aa for the read.  Value for key frameshift_positions is a reference to @frameshift_positions.  Value for key 'type' is a reference to \%type.  Value for 'full_seqs' is hash with keys 'nuc' and 'aa'
 		my %type; 	# Codon types.  keys 'normal', 'in-frame_indel', 'out-of-frame_indel', 'unknown'
@@ -664,12 +508,12 @@ sub read_input_reads {
 			# Check for gap in read or reference  (can't have gap in both read and ref, so if gap in one then the other is a base and can be saved)
 			if ($read_res =~ m/$gap_char/){
 				$frameshift++;
-#				$read_gaps++;
+	#				$read_gaps++;
 				
 			}
 			elsif($ref_res =~ m/$gap_char/){
 				$frameshift--;
-#				$ref_gaps++;
+	#				$ref_gaps++;
 			}
 
 			# Get nucleotide positions for this base
@@ -819,11 +663,11 @@ sub read_input_reads {
 	print $clean_reads_fh "#readID|gene|positionForFirstNucleotideBase\tcleanRead\n";
 	
 	my $fullpeptide = $save_dir . "/" . $filename . ".cleanpeptides.txt";
-#					print STDERR "Full peptide alignment will be stored in this file: $fullpeptide\n";
+	#					print STDERR "Full peptide alignment will be stored in this file: $fullpeptide\n";
 	my $pepfh = open_to_write("$fullpeptide");
 	print $pepfh "#readID|gene|positionForFirstAminoAcid\tcleanPeptide\n";
 
-#	my $printed; 	#Hashref to keep track of the sequences that have been printed already.  
+	#	my $printed; 	#Hashref to keep track of the sequences that have been printed already.  
 	my ($maxlength,$majority_length,$peplength) = get_max_sequence_length_from_fasta($file);
 	
 	foreach my $seq_info (@good){
@@ -844,9 +688,9 @@ sub read_input_reads {
 			foreach my $pos (@pos){
 				my $base_codon_aa = $seq_info->{$type}->{$pos};
 				$nuc_aa_codon_tally->{$type}->{$pos}->{$base_codon_aa} += $seq_count;
-#										if ($pos =~ /527/ && $type eq 'nuc' && $seq_info->{$type}->{$pos} eq 'G'){
-#											print Dumper($seq_info->{'full_seqs'});
-#										}
+	#										if ($pos =~ /527/ && $type eq 'nuc' && $seq_info->{$type}->{$pos} eq 'G'){
+	#											print Dumper($seq_info->{'full_seqs'});
+	#										}
 			}
 			# Print out the full sequences		[Are these printing out properly?  What about sequences with insertions in the read?  Should they be removed?]
 			# Do I need to print out the individual reads that are identical?  If so, do I need the original primerid in the name?  
@@ -890,12 +734,11 @@ sub read_input_reads {
 	}
 	
 
-#	print Dumper($nuc_aa_codon_tally->{'nuc'}->{'527'});
-#	print Dumper($nuc_aa_codon_tally->{'nuc'}->{'531'});
-#	exit;
+	#	print Dumper($nuc_aa_codon_tally->{'nuc'}->{'527'});
+	#	print Dumper($nuc_aa_codon_tally->{'nuc'}->{'531'});
+	#	exit;
 	
 	return $nuc_aa_codon_tally;
-	
 }
 #-----------------------------------------------------------------------------
 sub count_total_from_good_toss_arrays {
@@ -942,9 +785,9 @@ sub get_max_sequence_length_from_bam {
 		$n++;
 		last BAM if ($n > 50000);
 	}
-#	print Dumper(\%lengths);
+	#	print Dumper(\%lengths);
 	$majority_length = find_key_with_biggest_value(\%lengths);
-#	$pep_length = int(($max_length + 2)/3);
+	#	$pep_length = int(($max_length + 2)/3);
 	$pep_length = int(($majority_length + 2)/3);
 					#print STDERR "$n max: $max_length\tpeplength: $peplength\n"; exit;
 
@@ -969,9 +812,9 @@ sub get_max_sequence_length_from_fasta {
 		$n++;
 		last FASTA if ($n > 50000);
 	}
-#	print Dumper(\%lengths);
+	#	print Dumper(\%lengths);
 	$majority_length = find_key_with_biggest_value(\%lengths);
-#	$pep_length = int(($max_length + 2)/3);
+	#	$pep_length = int(($max_length + 2)/3);
 	$pep_length = int(($majority_length + 2)/3);
 					#print STDERR "$n max: $max_length\tpeplength: $peplength\n"; exit;
 
@@ -995,137 +838,6 @@ sub get_count_and_aln_length {
 	
 	close($readfh);
 	return ($count, $aln_length);
-}
-#-----------------------------------------------------------------------------
-sub parse_gff {
-	# Takes a gff file and a genome multi-fasta file of chromosomes and outputs a hashref containing the CDS starts, stops, strand, nucleotide sequence and protein sequence for each gene.  Also, nucleotide, amino acid and codons tables for lookup by position for each gene.  (Is it possible to have multiple CDS per gene in a gff file?  How would that affect this?)
-	my $file = shift;
-	my $genes;	# hashref to store the coordinates for the CDS of genes on the chromosomes.  first keys, chr; second keys, gene id; third keys start, stop, starts, stops, strand, nucleotide, protein, nuc->pos, aa->pos, codon->pos.
-	my $readfh = open_to_read($file);
-	
-	while(<$readfh>){
-		next if (m/^#/);
-		my @line = split(/\t/);
-		next unless (scalar(@line) > 8);
-		next unless ($line[2] eq "CDS");
-		my ($chr, $start, $stop, $strand) = ($line[0], $line[3], $line[4], $line[6]);
-		my $gene_id = get_gff_attribute($line[8], "ID");
-		my $codon_start = get_gff_attribute($line[8], "codon_start");
-					if ($debug){	print "id: $gene_id\tcodon_start: $codon_start\n";	}
-		if ($codon_start && ($codon_start > 1)){
-			unless ($genes->{$chr}->{$gene_id}->{starts}){		# This only applies to the first exon.  For some reason, the codon_start attribute occurs on all CDS exon features of a CDS, all referring to the start codon of the first CDS exon.
-				# Then this is the first CDS exon.
-				$start += $codon_start - 1;
-			}
-		}
-		
-#		next unless ($strand eq "+");		# Assuming + strand for now because my annotation is all on + strand.		
-
-		$genes->{$chr}->{$gene_id}->{strand} = $strand;	
-		if (exists($genes->{$chr}->{$gene_id}->{start})){
-			# One portion of the CDS is already present.  For the purpose of the TSS and TTS, get the earliest start and latest stop
-			$genes->{$chr}->{$gene_id}->{start} 	= ($start < $genes->{$chr}->{$gene_id}->{start})	? $start 	: $genes->{$chr}->{$gene_id}->{start}; 		# If the value present is larger, then reassign to the smaller one.
-			$genes->{$chr}->{$gene_id}->{stop} 	= ($stop  > $genes->{$chr}->{$gene_id}->{stop}) 	? $stop 	: $genes->{$chr}->{$gene_id}->{stop}; 		# If the value present is smaller, then reassign to the larger one.
-		}
-		else {
-			$genes->{$chr}->{$gene_id}->{start} = $start;
-			$genes->{$chr}->{$gene_id}->{stop} = $stop;				
-		}
-		
-		push @{ $genes->{$chr}->{$gene_id}->{starts} }, $start;				# Some influenza proteins are spliced.  In that case, multiple CDS lines from GFF file need to be concatenated...
-		push @{ $genes->{$chr}->{$gene_id}->{stops} }, $stop;	
-	
-	}
-	
-	close ($readfh);
-
-#				return $genes;
-
-	# Now take CDS entries and get sequence for them from --fasta input file, then translate that sequence
-	my $in  = Bio::SeqIO->new(-file => "$ref" ,
-                           -format => 'Fasta');
-	while ( my $seq = $in->next_seq() ) {
-		my $chr = $seq->display_id();	# chr name		#print "id: $chr\n";
-		next unless exists ($genes->{$chr});		# Skip this fasta record if there are no annotated genes on this chromosome.
-		foreach my $gene (keys %{$genes->{$chr}}){		# Look at each gene on this chromosome.  Assuming + strand since my GFF file only has + strand genes.  Actually, I can just reverse complement the final concatenated sequence if it is the - strand.  
-			# Get the first CDS segment
-			my $seqstr_nuc = $seq->subseq( $genes->{$chr}->{$gene}->{starts}->[0], $genes->{$chr}->{$gene}->{stops}->[0] );		#	print "$chr $gene: ".length($seqstr_nuc)."\n";
-			if (scalar(@{$genes->{$chr}->{$gene}->{starts}})>1){		# If there are additional CDS segments
-				# Then get the rest of the sequences.	I can concatenate the rest to the first segment $seqstr_nuc because I've assumed above that they are all on the + strand.
-				for (my $i = 1; $i < @{$genes->{$chr}->{$gene}->{starts}}; $i++){
-					$seqstr_nuc .= $seq->subseq( $genes->{$chr}->{$gene}->{starts}->[$i], $genes->{$chr}->{$gene}->{stops}->[$i] );	#	print "$chr $gene: ".length($seqstr_nuc)."\n";
-				}
-			}
-			if ($genes->{$chr}->{$gene}->{strand} eq '-'){
-				my $seqstr_nuc = Fastq_utils::rev_comp($seqstr_nuc);	# Not tested.  
-			}
-			my $prot = translate_seq($seqstr_nuc);
-			$genes->{$chr}->{$gene}->{nucleotide} = $seqstr_nuc;
-			$genes->{$chr}->{$gene}->{protein} = $prot;
-			
-			# Now save the nucleotides, amino acids and codons by position.  
-			my @nuc = split(/|/, $seqstr_nuc);
-			my @aa = split(/|/, $prot);
-			my @codon = unpack("(a3)*", $seqstr_nuc);		# http://stackoverflow.com/questions/372370/how-can-i-split-a-string-into-chunks-of-two-characters-each-in-perl
-				# Nucleotides first
-			for (my $i = 0; $i < @nuc; $i++){
-				my $nt = uc($nuc[$i]);
-				my $pos = $i + 1;
-				if (exists($genes->{$chr}->{$gene}->{'nuc'}->{$pos})){
-					warn "This gene + nucleotide position already present: $gene, $pos, $nt\n";
-				}
-				else {
-					$genes->{$chr}->{$gene}->{'nuc'}->{$pos} = $nt;
-				}
-			}
-			
-				# Now save amino acids and codons
-			for (my $i = 0; $i < @aa; $i++){
-				my $aa = uc($aa[$i]);
-				my $codon = uc($codon[$i]);
-				my $pos = $i + 1;
-#				unless ($aa =~ m/X/i){			# Commented this out because if we skip these amino acids, it will cause a frameshift.
-					# Amino acid
-					if (exists($genes->{$chr}->{$gene}->{'aa'}->{$pos})){
-						warn "This gene + amino acid position already present: $gene, $pos, $aa\n";
-					}
-					else {
-						$genes->{$chr}->{$gene}->{'aa'}->{$pos} = $aa;
-					}
-					# Codon
-					if (exists($genes->{$chr}->{$gene}->{'codon'}->{$pos})){
-						warn "This gene + codon position already present: $gene, $pos, $codon\n";
-					}
-					else {
-						$genes->{$chr}->{$gene}->{'codon'}->{$pos} = $codon;
-					}
-#				}
-			}	
-		}
-	}
-	
-	return $genes;
-}
-#-----------------------------------------------------------------------------
-sub get_gff_attribute {
-	# gets the gene ID.  "IDs must be unique within the scope of the GFF file"	http://gmod.org/wiki/GFF
-	my $attributes = shift;
-	my $tag = shift;
-	my @attributes = split(/;/, $attributes);
-	my $value;
-	foreach my $pair (@attributes){
-		my @pair = split(/=/, $pair);
-		if ($pair[0] eq "$tag"){
-			$value = $pair[1];
-		}
-		else {
-#			print "Not ID: $pair[0]\n";
-		}
-	}
-	unless ($value){
-		die "No $tag found in the GFF attributes: \n$attributes\n";
-	}
-	return $value;
 }
 #-----------------------------------------------------------------------------
 sub get_cds_sequences {
@@ -1164,7 +876,9 @@ sub get_cds_sequences {
 #-----------------------------------------------------------------------------
 sub translate_seq {
 	# Assumes the sequence is in frame.  Translates to amino acid sequence
-	my $seq = shift;	#nucleotide sequence
+	my ($seq, $converter) = @_;	#nucleotide sequence
+	my %converter = %$converter;
+
 	my @aa;	
 	my $num_codons = length ($seq) / 3; 
 	CODON: for (my $i = 0; $i < $num_codons; $i++){		 # Could use unpack as in get_reference_protein_hash if desired.  
@@ -1188,368 +902,7 @@ sub translate_seq {
 	return $prot;
 }
 #-----------------------------------------------------------------------------
-sub print_reports {
-	my ($nuc_aa_codon_tally, $label) = @_;
-	# Print Reports to filehandles $nucleotide_report_fh, $codon_report_fh, and $amino_acid_report_fh
-	#name(chr:gene:aminoAcidPosition:consensusAminoAcid)	chr	gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	Sample	coverageDepth	numA	numC	numG	numT	numN	[del	SumACGT	numNonzeroACGT	Ref	Nonref]
 
-	my @all_codons = @CODON;
-	for (@all_codons){
-		s/:.+//;		# Was s/:\w+//;  changed to s/:.+//; for numTAA:* and others with *
-	}
-		
-	
-	foreach my $type (qw(nuc codon aa)){		#e.g., $nuc_aa_codon_tally->{'aa'}->{$pos}->{$aa}++;
-		foreach my $pos (sort {$a <=> $b} keys %{$nuc_aa_codon_tally->{$type}}){
-			my $ref_sequence = $cds->{$type}->{$pos};
-			unless ($ref_sequence){
-				print STDERR "Error in print_reports: no reference $type: $gene $pos\n";	
-				if ($debug){	print Dumper($cds->{$type});		}
-				if ($debug){	print Dumper($nuc_aa_codon_tally->{$type}->{$pos});	}
-			}
-			my $cons_with_num = find_key_with_biggest_value($nuc_aa_codon_tally->{$type}->{$pos}, 2);		# Assuming there won't be a tie for most abundant.  
-			my ($consensus,$numConsensus) = split(/, /, $cons_with_num);
-			my $diff = "";
-			$diff = "DIFF" if ($consensus ne $ref_sequence);
-			my $name = $gene.":".$pos.":".$consensus;
-			my $coverage = total(values(%{$nuc_aa_codon_tally->{$type}->{$pos}})); 
-
-			# Also compute values for columns: unambigCoverageDepth	unambigConsensus numUnambigConsensus	numUnambigNonConsensus	numMajorAltAllele	majorAltAllele
-				# unambigCoverageDepth.  Compute coverage depth for non-ambiguous residues.  For amino acid coverage, only consider regular amino acids (not *, X, or -).  For nuc, only consider A, C, T, G (not N).  For codon, only consider codons with A, C, T, and G (not codons with N).
-				# unambigConsensus.  If Consensus residue is an ambiguous residue, report the next most abundant non-ambiguous residue, otherwise, report the consensus.  
-				# numUnambigConsensus.  Report the tally number for the consensus allele.  Report '0' if the consensus is an ambiguous residue.
-				# numUnambigNonConsensus.  Sum up all residues other than the consensus allele, not including ambiguous residues.  Should be equal to unambigCoverageDepth - numUnambigConsensus.  
-				# majorAltAllele.  This is the major alternate allele (i.e., second highest count after the consensus residue, not including ambiguous characters)
-				# numMajorAltAllele.  This is the tally number for the majorAltAllele. 
-			my $unambig_residues = get_unambig_tally($nuc_aa_codon_tally->{$type}->{$pos}, $type);	 # Returns hashref with the ambiguous residues removed
-			my $unambig_coverage = total(values(%$unambig_residues));
-			my $unambig_consensus_with_num = find_key_with_biggest_value($unambig_residues, 2);
-			my ($unambig_consensus,$num_unambig_consensus) = split(/, /, $unambig_consensus_with_num);
-			my $num_unambig_nonconsensus = $unambig_coverage - $num_unambig_consensus;
-			my $tally_without_consensus = remove_one_from_tally($unambig_residues,$unambig_consensus);
-			my ($major_alt_allele,$num_major_alt_allele) = ("", 0);	# Default empty, in case there is no alternate allele.
-			if (%$tally_without_consensus){
-				# Then there are alternate allele(s)
-				my $major_alt_alleles = find_key_with_biggest_value($tally_without_consensus, 2, 1);	# returns AoA of all max alleles (will usually be an AoA with just one entry, but will have multiple entries if there is a tie for the max number)
-				my @alt_alleles;
-				my @alt_counts;
-				foreach (@$major_alt_alleles){
-					my ($alt,$count) = @$_;
-					#print STDERR "alt: $alt, $count\n";
-					push @alt_alleles, $alt;
-					push @alt_counts, $count;
-				}
-				$major_alt_allele = join ",", @alt_alleles;
-				$num_major_alt_allele  = join ",", @alt_counts;
-			}
-			
-			if ($verbose){		# $num_unambig_nonconsensus > 0 && 
-				print STDERR "\n$pos, $type\n";
-				print STDERR Dumper($nuc_aa_codon_tally->{$type}->{$pos});
-				print STDERR "unambig\n";
-				print STDERR Dumper($unambig_residues);
-				print STDERR "unambig_cov: $unambig_coverage\n";
-				print STDERR "tally without consensus\n";
-				print STDERR Dumper($tally_without_consensus);
-				print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n\n";
-				#exit;
-			}
-
-			# Now print the counts, number of amino acids represented, ref aa counts, and nonref aa counts.
-			if ($type eq 'nuc'){
-				print $nucleotide_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
-				print_tally_line($nucleotide_report_fh, 	$nuc_aa_codon_tally->{$type}->{$pos}, \@NUC);
-			}
-			elsif($type eq 'codon'){
-				print $codon_report_fh 		join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
-				print_tally_line($codon_report_fh, 		$nuc_aa_codon_tally->{$type}->{$pos}, \@all_codons);
-			}
-			else {
-				print $amino_acid_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
-				print_tally_line($amino_acid_report_fh, 	$nuc_aa_codon_tally->{$type}->{$pos}, \@AA);
-			}
-		}
-	}
-}
-#-----------------------------------------------------------------------------
-sub print_tally_line {
-	my ($writefh, $tally, $all_array) = @_;
-	my @seen;
-	foreach my $nuc_codon_aa (@$all_array){
-		if (exists($tally->{$nuc_codon_aa})){
-			my $count = $tally->{$nuc_codon_aa};
-			print $writefh "\t".$count;
-			push @seen, $nuc_codon_aa;
-		}
-		else {
-			print $writefh "\t0";
-		}
-	}
-	my @keys = keys %$tally;
-	my @other = array_minus( @keys, @seen );		#http://stackoverflow.com/questions/2933347/comparing-two-arrays-using-perl  # get items from array @a that are not in array @b: my @minus = array_minus( @a, @b );
-	if (@other > 0){
-		my $other_sum = 0;
-		foreach (@other){
-			$other_sum += $tally->{$_};
-		}
-		print $writefh "\t$other_sum";		# Maybe I should find a way to record what these other ones are... a separate report somewhere?  probably a lot of Xs, is my guess.  
-		my $others;
-		foreach (@other){
-			$others .= "$_:$tally->{$_},";
-
-		}
-		$others =~ s/,$//;
-		print $writefh "($others)";
-
-	}
-	else {
-		print $writefh "\t0";
-	}
-	print $writefh "\n";
-}
-#-----------------------------------------------------------------------------
-sub get_unambig_tally {
-	my ($tally_hashref, $nuc_codon_aa) = @_;
-	# Takes a hashref tally for nucleotides, codons, or amino acids (for a particular position) and removes all but the standard nucleotides, codons, and amino acids
-	# For nucleotides, only report A, C, T, G
-	# For codons, only report codons that unambiguously resolve to a known amino acid (using the %converter hash, which takes into account wobble nucleotides)	
-		# Or, should we only report codons that are made up of A, C, T, and G?
-	# For amino acids, only report qw(A C D E F G H I K L M N P Q R S T V W Y)
-	my %aa; 
-	foreach ( qw(A C D E F G H I K L M N P Q R S T V W Y *) ){
-		$aa{$_} = 1;
-	}
-	my %nuc;
-	foreach ( qw(A C T G) ){
-		$nuc{$_} = 1;
-	}
-
-	my $unambig_tally_hashref;
-
-	foreach my $res (keys %$tally_hashref){
-		my $unambig = 0;	# Becomes 1 if found to be an unambiguous residue
-		if ($nuc_codon_aa eq 'nuc'){
-			$unambig++ if (exists($nuc{$res}));
-		}
-		elsif($nuc_codon_aa eq 'aa'){
-			$unambig++ if (exists($aa{$res}));
-		}
-		elsif($nuc_codon_aa eq 'codon'){
-			my $codon_to_aa = "";
-			if (exists($converter{$res})){
-				$codon_to_aa = $converter{$res};
-			}
-			$unambig++ if ($codon_to_aa && exists($aa{$codon_to_aa}));		
-		}
-		$unambig_tally_hashref->{$res} = $tally_hashref->{$res} if $unambig;
-	}
-
-	return $unambig_tally_hashref;
-}
-#-----------------------------------------------------------------------------
-sub remove_one_from_tally {
-	# Takes a hashref tally for nucleotides, codons, or amino acids (for a particular position) and removes the most abundant residue
-	my ($tally_hashref,$key_to_remove) = @_;
-	my %tally_without_consensus = %$tally_hashref;  # Make a copy to modify
-
-	delete($tally_without_consensus{$key_to_remove});
-
-	return \%tally_without_consensus;
-}
-#-----------------------------------------------------------------------------
-sub print_merged_report {
-	my ($nuc_aa_codon_tally, $label) = @_;
-	# Print Reports to filehandles $nucleotide_report_fh, $codon_report_fh, and $amino_acid_report_fh
-	#name(gene:aminoAcidPosition:consensusAminoAcid)	gene nucleotidePosition refNucleotide consensusNucleotide aminoAcidPosition refCodon	consensusCodon	refAminoAcid	consensusAminoAcid	Sample	coverageDepth	topNucleotide	secondNucleotide	thirdNucleotide	otherNucleotide	countTopNucleotide	countSecondNucleotide	countThirdNucleotide	countOtherNucleotide	topCodon	secondCodon	thirdCodon	otherCodon	countTopCodon	countSecondCodon	countThirdCodon	countOtherCodon	topAminoAcid	secondAminoAcid	thirdAminoAcid	otherAminoAcid	countTopAminoAcid	countSecondAminoAcid	countThirdAminoAcid	countOtherAminoAcid
-	# $nuc_aa_codon_tally format example: $nuc_aa_codon_tally->{'aa'}->{$pos}->{$aa}++;
-	my @all_codons = @CODON;
-	for (@all_codons){
-		s/:.+//;		# Was s/:\w+//;  changed to s/:.+//; for numTAA:* and others with *
-	}
-		
-	
-	my $first_nuc_pos = (sort {$a <=> $b} keys %{ $nuc_aa_codon_tally->{'nuc'} })[0]; 
-#						print "first nuc position: $first_nuc_pos\n"; exit; 
-	my $first_aa_pos =  (sort {$a <=> $b} keys %{ $nuc_aa_codon_tally->{'aa'} })[0]; 
-#						print "first aa position: $first_aa_pos\n"; exit;
-	my $last_aa_codon_line = "\t"x16 ."\n";			# For repeating the amino acid and codon information for each nucleotide base of the codon.  Default will be an empty line (keep tabs for proper spreadsheet spacing) in case there are a few nt before the first codon.  
-	foreach my $nuc_pos (sort {$a <=> $b} keys %{$nuc_aa_codon_tally->{'nuc'}}){		# 
-		my $aa_pos = int(($nuc_pos+2)/3);		# Need to add 2 first before dividing by 3.  E.g., ACGTAG, for nucl position 1, to get amino acid position, int((1+2)/3) = 1.  For nuc position 3, int((3+2)/3)=1. For nuc position 4, int((4+2)/3) = 2.
-		my $position_in_codon = get_position_in_codon($nuc_pos);
-		my $ref_nuc 		= $cds->{'nuc'}->{$nuc_pos};
-		my $consensus_nuc 	= find_key_with_biggest_value($nuc_aa_codon_tally->{'nuc'}->{$nuc_pos});		# Assuming there won't be a tie for most abundant
-		my $diff = "";
-		$diff = "DIFF" if ($consensus_nuc ne $ref_nuc);
-		my $ref_codon 		= $cds->{'codon'}->{$aa_pos};
-		my $consensus_codon	= find_key_with_biggest_value($nuc_aa_codon_tally->{'codon'}->{$aa_pos}) || ""; 
-		my $ref_aa			= $cds->{'aa'}->{$aa_pos};
-		my $consensus_aa	= find_key_with_biggest_value($nuc_aa_codon_tally->{'aa'}->{$aa_pos}) || "";	
-		my $name = $gene.":".$aa_pos.":".$consensus_aa;
-		my $coverage = total(values(%{$nuc_aa_codon_tally->{'nuc'}->{$nuc_pos}})); 
-
-		# Print reference and consensus information
-		print $merged_report_fh join "\t", $name, $gene, $nuc_pos, $position_in_codon, $ref_nuc, $consensus_nuc, $diff, $aa_pos, $ref_codon, $consensus_codon, $ref_aa, $consensus_aa, $label, $coverage;
-
-		# Print Nucleotide top hits, then Codon, then Amino Acid, e.g., topNucleotide	secondNucleotide	thirdNucleotide	otherNucleotide	countTopNucleotide	countSecondNucleotide	countThirdNucleotide	countOtherNucleotide	
-		my $arrayRef = [ ['nuc', $nuc_pos], ['codon', $aa_pos], ['aa', $aa_pos] ];
-		foreach my $pairs (@$arrayRef){
-			my ($type, $pos) = @$pairs;
-#								print "$type $pos\n";
-			if (exists($nuc_aa_codon_tally->{$type}->{$pos})){
-				print_top_hits($nuc_aa_codon_tally->{$type}->{$pos});
-			}
-			else {
-				print $merged_report_fh "\t"x8; 	# print blank fields.  Shouldn't have any because the nucleotide sequences are trimmed to the first codon before tallying up nucleotides and amino acids.  Although maybe not trimmed at the 3' end of reads...
-			}
-		}
-		
-		# Now print the counts, number of amino acids represented, ref aa counts, and nonref aa counts. 
-		
-		print $merged_report_fh "\n"; 
-	}
-}
-#-----------------------------------------------------------------------------
-sub get_position_in_codon {
-	my $nuc_pos = shift;
-	my $position_in_codon = 0;
-	my $remainder = $nuc_pos % 3; 
-	# If remainder is 0, then position is 3; if remainder is 2, position is 2; if remainder is 1, position is 1.  
-	$position_in_codon = $remainder || 3;
-	return $position_in_codon;
-}
-#-----------------------------------------------------------------------------
-sub print_top_hits {
-	# Prints to $merged_report_fh
-	# E.g., topNucleotide	secondNucleotide	thirdNucleotide	otherNucleotide	countTopNucleotide	countSecondNucleotide	countThirdNucleotide	countOtherNucleotide	
-	# Keep in mind that some will only have one or two nucleotides (or aa or codons) in the tally.  In that case, just keep the other columns blank. 
-	my ($tally) = @_;
-#				print Dumper($tally);
-	my $the_rest = "";
-	my $the_rest_count = 0;
-	my @top_three;
-	my @top_three_counts;
-	my $i = 0;
-	foreach my $key (sort {$tally->{$b} <=> $tally->{$a}} keys %$tally){
-		if ($i<3){
-			push @top_three, $key;
-			push @top_three_counts, $tally->{$key};
-		}
-		else {
-			$the_rest .= $key.",";
-			$the_rest_count += $tally->{$key};
-		}		
-		$i++;
-	}
-	$the_rest =~ s/,$//;
-	push @top_three, $the_rest;
-	push @top_three_counts, $the_rest_count;
-#	print Dumper(\@top_three, \@top_three_counts);
-	foreach my $array (\@top_three, \@top_three_counts){
-		for (my $i = 0; $i < 4; $i++){		# Added "the_rest" to these arrays, so now there are 4 elements
-			if ($array->[$i]){
-				print $merged_report_fh "\t$array->[$i]";
-			}
-			else {
-				print $merged_report_fh "\t";
-			}
-		}
-	}
-}
-#-----------------------------------------------------------------------------
-sub print_top_hits_alternative {
-	# Prints to $merged_report_fh
-	# E.g., topNucleotide	secondNucleotide	thirdNucleotide	otherNucleotide	countTopNucleotide	countSecondNucleotide	countThirdNucleotide	countOtherNucleotide	
-	# Keep in mind that some will only have one or two nucleotides (or aa or codons) in the tally.  In that case, just keep the other columns blank. 
-	my ($tally) = @_;
-#				print Dumper($tally);
-	my $the_rest = "";
-	my $the_rest_count = 0;
-	my @top_three;
-	my @top_three_counts;
-	my $i = 0;
-	foreach my $key (sort {$tally->{$b} <=> $tally->{$a}} keys %$tally){
-		if ($i<3){
-			push @top_three, $key;
-			push @top_three_counts, $tally->{$key};
-		}
-		else {
-			$the_rest .= $key.",";
-			$the_rest_count += $tally->{$key};
-		}		
-		$i++;
-	}
-	$the_rest =~ s/,$//;
-	push @top_three, $the_rest;
-	push @top_three_counts, $the_rest_count;
-#					print Dumper(\@top_three, \@top_three_counts);
-	for (my $i = 0; $i < 4; $i++){		# Added "the_rest" to these arrays, so now there are 4 elements
-		foreach my $array (\@top_three, \@top_three_counts){
-			if ($array->[$i]){
-				print $merged_report_fh "\t$array->[$i]";
-			}
-			else {
-				print $merged_report_fh "\t";
-			}
-		}
-	}
-}
-#-----------------------------------------------------------------------------
-sub print_variants {
-	my ($nuc_aa_codon_tally, $label) = @_;
-	# Filters the variants (nuc, aa, codon) for those that are above a certain threshold in frequency and then performs linkage disequilibrium in a pairwise manner for all variants at level of nuc, codon, or aa.
-	
-	# First get the variants that are above a frequency threshold
-		#Type\tgene\tposition\tconsensus\tvariant\tcount\tcoverage\tfrequency\n";
-	 	# type is nucleotide, codon or aa.  
-	 	# position is either aa or nuc position
-	 	# consensus is the one that is highest
-	 	# variant is the one with frequency above threshold
-	 	# Count is the count for this particular variant
-	 	# Coverage is the number of reads at this position
-	 	# Frequency is count/coverage
-	print STDERR "Printing out variants report. ";
-	&elapsed($start_time, 'Elapsed', $verbose);
-
-	my $variants_pass;	#hashref of same structure as $nuc_aa_codon_tally, only has variants to consider for linkage disequilibrium.  
-	my $max_coverage = 0; 	
-	foreach my $type (qw(nuc codon aa)){	# was foreach my $type (keys %$nuc_aa_codon_tally){			#e.g., $nuc_aa_codon_tally->{'aa'}->{$pos}->{$aa}++;
-		my $i = 0;
-		foreach my $pos (sort {$a <=> $b} keys %{$nuc_aa_codon_tally->{$type}}){
-			my $consensus = find_key_with_biggest_value($nuc_aa_codon_tally->{$type}->{$pos}) || "";
-			my $coverage = total(values(%{ $nuc_aa_codon_tally->{$type}->{$pos} }));
-#								print "type: $type\tposition: $pos\tcoverage: $coverage\n";
-			$max_coverage = $coverage if ($coverage > $max_coverage);
-#					next unless ($coverage >= $max_coverage * 0.05);		# Ignore low-coverage regions.  5% of max is just arbitrary.  This could be a problem if the reads start out with low coverage.  With amplicon sequencing, that won't be a problem.  
-			my $filter = "";
-			$filter .= "LOW_COVERAGE," 	if ($coverage < $max_coverage * 0.05);
-			$filter .= "CONSENSUS_N," 	if ($consensus =~ m/N/ && $type ne 'aa');		# N is asparagine amino acid, which is valid.  
-			$filter .= "CONSENSUS_X," 	if ($consensus =~ m/X/);
-			$filter .= "CONSENSUS_DEL,"	if ($consensus =~ m/-/);
-			my $threshold_count = $variant_threshold * $coverage; 
-			foreach my $variant (keys (%{ $nuc_aa_codon_tally->{$type}->{$pos} })){
-				next if ($variant eq $consensus);
-								if ($verbose){	print STDERR "pos: $pos consensus: $consensus variant: $variant\n";	}
-				my $variant_filter = $filter;
-				$variant_filter .= "VARIANT_N," 	if ($variant =~ m/N/ && $type ne 'aa');		# N is asparagine amino acid, which is valid. Only assign this message if you are looking at codons or individual nucleotides.
-				$variant_filter .= "VARIANT_X," 	if ($variant =~ m/X/);
-				$variant_filter .= "VARIANT_DEL,"	if ($variant =~ m/-/);
-				$variant_filter = "PASS" unless ($variant_filter);		# After all filters checked.
-				my $count = $nuc_aa_codon_tally->{$type}->{$pos}->{$variant};
-				if ($count >= $threshold_count){
-					my $frequency = sprintf("%.5f",  $nuc_aa_codon_tally->{$type}->{$pos}->{$variant} / $coverage);
-					print $variants_fh join "\t", $type, $gene, $pos, $consensus, $variant, $count, $coverage, $frequency, $variant_filter;
-					print $variants_fh "\n";
-#							if ($variant_filter eq "PASS"){
-#								$variants_pass->{$type}->[$i]->{'pos'} = $pos; 
-#								$variants_pass->{$type}->[$i]->{'variant'} = $variant;
-#								$variants_pass->{$type}->[$i]->{'filter'} = $variant_filter;  # Save the filter so I can check it later.  Or I could just save only those that have "PASS" filter...
-#								$i++;	# increment the variant count.
-#							}
-				}
-			}
-		}
-	}
-}
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
