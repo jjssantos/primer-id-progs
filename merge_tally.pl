@@ -97,9 +97,7 @@ OR
 
 Optional Arguments:
 --prefix	Prefix for output files.  Default = Merge_convert_reads.  Sample id will be 
-		added to the prefix.
---save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
-		will be created.
+		added to the prefix.  If the prefix value contains a directory, the directory must exist.
 --variant_threshold	Minimum threshold frequency for output variant file.  Default = 0 
 		(i.e., print all variants).  (Note that in calculate_linkage_disequilibrium.pl
 		there is an option to filter for a variant_threshold as well.)
@@ -118,6 +116,10 @@ merge_tally.pl --dir 30_S1_tallies --sample Parental --prefix 30_S1.contigs.pi.b
 # Change log
 # 2017-02-04
 # Created script, based on convert_reads_to_amino_acid.pl
+# 2017-02-11
+# Removed --save option.  Just include any directory in the --prefix.  ($prefix can contain absolute or relative path).
+# --save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
+#			will be created.
 
 
 unless ($dir||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
@@ -131,12 +133,6 @@ if ($sample && $sample =~ m/[\s+,\|]/){
 	exit 1;
 }
 
-
-my $save_dir = $save || Cwd::cwd();
-# print $save_dir;
-# exit;
-unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
-# warn "save directory: $save_dir\n";
 
 my $start_time = time;
 
@@ -193,9 +189,9 @@ my @samples = keys %$sample_nuc_aa_codon_tally;
 
 for (my $i = 0; $i < @samples; $i++){
 	my $prefix_with_sample = $prefix . "." . $samples[$i];
-	print_reports($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $save_dir, $prefix_with_sample, $verbose, $debug);		
-	print_merged_report($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@CODON, $cds, $save_dir, $prefix_with_sample);	
-	print_variants($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, $variant_threshold, $save_dir, $prefix_with_sample, $start_time, $verbose);
+	print_reports($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $prefix_with_sample, $verbose, $debug);		
+	print_merged_report($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@CODON, $cds, $prefix_with_sample);	
+	print_variants($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, $variant_threshold, $prefix_with_sample, $start_time, $verbose);
 }
 
 

@@ -18,7 +18,6 @@ use diagnostics;
 use Getopt::Long;
 use Data::Dumper;
 use File::Basename;
-use Bio::DB::Sam;		#http://search.cpan.org/~lds/Bio-SamTools-1.37/lib/Bio/DB/Sam.pm
 use Bio::SeqIO;
 use Array::Utils qw(:all);
 use File::Slurp qw( prepend_file );
@@ -26,12 +25,6 @@ use Parallel::Loops;
 use Bio::AlignIO;
 use Bio::Tools::Run::Alignment::Clustalw;
 use File::Which;
-
-#use Bio::Perl;
-#use Getopt::Std;
-#use PostData;
-#use Fasta_utils;
-#use feature ":5.10";	#allows say (same as print, but adds "\n"), given/when switch, etc.
 
 
 # Andrew J. Oler, PhD
@@ -114,21 +107,19 @@ mafft
 clustalw (if using --clustalw)
 
 Non-standard Perl modules:
-Bioperl, including Bio::DB::Sam and Bio::Tools::Run::Alignment::Clustalw
+Bioperl, including Bio::Tools::Run::Alignment::Clustalw
 Array::Utils
 Parallel::Loops
 
-
 Required Arguments:
--i/--input 	Input file, comma-delimited.  Required.
+-i/--input 	Input FASTA file.  Required.
 -r/--ref	Reference coding (CDS) sequence fasta file.  Required.  Used to determine 
 		translation frame of reference.
 
 Optional Arguments:
 -l/--label		Name for sample.  Default: Sample_1
---prefix	Prefix for output files.  Default = Convert_reads
--s/--save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
-		will be created.
+--prefix	Prefix for output files.  Default = Convert_reads.  If the prefix value 
+		contains a directory, the directory must exist.
 -p/--cpu	Number of processors to use. Default = 1.
 --clustalw	Use clustalw to run alignments. Default is to use mafft.  *Executables must be 
 		on the PATH.*  Speed is about the same for clustalw and mafft (about 1.3x faster 
@@ -148,8 +139,8 @@ Notes:
 1. Recommended h_vmem (RAM) value per thread is 6G, although it may be fine with less, 
 	depending on the size and complexity of your input file. 
 2. If running more than 20,000 sequences, it is recommended to split the file and run each
-	separately,	saving the output into a separate directory, then merging the results with 
-	merge_tally.pl.
+	separately,	saving the output into a single directory, then merging the results with 
+	merge_tally.pl
 ";
 
 
@@ -272,15 +263,13 @@ Notes:
 # Resulting simplifications: 
 #	1. Move global variables to subroutines, including filehandles for output files (tally.xls, variants, etc.)
 #	2. Move some subroutines to module primerid.pm so they can be used by merge_tally.pl as well.
+# 2017-02-11
+# Removed --save option.  Just include any directory in the --prefix.  ($prefix can contain absolute or relative path).
+# -s/--save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
+#			will be created.
 
 
 unless ($ref && ($input||$ARGV[0]) ){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
-
-my $save_dir = $save || Cwd::cwd();
-# print $save_dir;
-# exit;
-unless (-d $save_dir){	mkdir($save_dir) or warn "$!\n"	}
-# warn "save directory: $save_dir\n";
 
 my $start_time = time;
 
@@ -332,15 +321,15 @@ foreach my $aa (@AA){		# Make the codons in the report in the same order as the 
 
 
 
-my $unique_seqs_file = get_unique_seqs($input);
+my $unique_seqs_file = get_unique_seqs($input, $prefix);
 
-my $nuc_aa_codon_tally = read_input_reads($unique_seqs_file);
+my $nuc_aa_codon_tally = read_input_reads($unique_seqs_file, $prefix);
 	#			print Dumper($nuc_aa_codon_tally); exit;
-print_reports($nuc_aa_codon_tally, $label, $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $save_dir, $prefix, $verbose, $debug);		
+print_reports($nuc_aa_codon_tally, $label, $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $prefix, $verbose, $debug);		
 
-print_merged_report($nuc_aa_codon_tally, $label, $gene, \@CODON, $cds, $save_dir, $prefix);	
+print_merged_report($nuc_aa_codon_tally, $label, $gene, \@CODON, $cds, $prefix);	
 
-print_variants($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $save_dir, $prefix, $start_time, $verbose);
+print_variants($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $prefix, $start_time, $verbose);
 
 
 
@@ -350,7 +339,7 @@ print_variants($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $save_dir
 #---------------------------------- SUBS -------------------------------------
 #-----------------------------------------------------------------------------
 sub get_unique_seqs {
-	my $file = shift;
+	my ($file, $prefix) = @_;
 	
 	# Get the unique sequences in a fasta file with counts and a hash with number of times the sequence was found in the file = "count".  
 	# This is designed to speed up the computation significantly, since many of the reads will be identical.  
@@ -367,9 +356,9 @@ sub get_unique_seqs {
 	# ...
 	# The id has seq number - count ; it's sorted by most common to least common sequence
 
-	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
+	#my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 	#	my $unique_seqs_fasta = $dir . $filename . ".uniq" . $ext; 		# Make it a real file, not a temp file
-	my $unique_seqs_fasta = $save_dir . "/$filename" . ".uniq" . $ext; 		# Make it a real file, not a temp file
+	my $unique_seqs_fasta = $prefix . ".uniq.fasta"; 		# Make it a real file, not a temp file
 	
 	#my $check_for_fasta_collapser = which("fasta_collapser.pl");		# returns undef if not found on system.
 	#if ($check_for_fasta_collapser){
@@ -386,7 +375,7 @@ sub get_unique_seqs {
 }	
 #-----------------------------------------------------------------------------
 sub read_input_reads {
-	my $file = shift;
+	my ($file, $prefix) = @_;
 	my $nuc_aa_codon_tally; 
 	print STDERR "Processing file $file ...\n";
 	
@@ -658,11 +647,11 @@ sub read_input_reads {
 	# Prepare the output files of cleaned reads and full peptides
 	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);
 	
-	my $newfilename = $save_dir . "/" . $filename . ".cleanreads.txt";
+	my $newfilename = $prefix . ".cleanreads.txt";
 	my $clean_reads_fh = open_to_write("$newfilename");
 	print $clean_reads_fh "#readID|gene|positionForFirstNucleotideBase\tcleanRead\n";
 	
-	my $fullpeptide = $save_dir . "/" . $filename . ".cleanpeptides.txt";
+	my $fullpeptide = $prefix . ".cleanpeptides.txt";
 	#					print STDERR "Full peptide alignment will be stored in this file: $fullpeptide\n";
 	my $pepfh = open_to_write("$fullpeptide");
 	print $pepfh "#readID|gene|positionForFirstAminoAcid\tcleanPeptide\n";

@@ -44,7 +44,9 @@ our @EXPORT = qw(
 # 2017-02-05
 # Created module.  Moved some subroutines from convert_reads_to_amino_acid.pl to 
 # this module so they can be used by merge_tally.pl as well.
-
+# 2017-02-11
+# Removed $save_dir as input, using $prefix alone ($prefix can contain absolute 
+# or relative path).
 
 #-------------------------------------------------------------------------------
 #----------------------------------- FUNCTIONS ---------------------------------
@@ -159,16 +161,16 @@ sub make_codon_to_aa_hash {
 }
 #-----------------------------------------------------------------------------
 sub print_reports {
-	my ($nuc_aa_codon_tally, $label, $gene, $NUC, $CODON, $AA, $cds, $converter, $save_dir, $prefix, $verbose, $debug) = @_;
+	my ($nuc_aa_codon_tally, $label, $gene, $NUC, $CODON, $AA, $cds, $converter, $prefix, $verbose, $debug) = @_;
 	# Print Reports to filehandles $nucleotide_report_fh, $codon_report_fh, and $amino_acid_report_fh
 	# TO DO: Add more documentation about the input data format ($cds, $nuc_aa_codon_tally, etc.)
 
 	#name(chr:gene:aminoAcidPosition:consensusAminoAcid)	chr	gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	Sample	coverageDepth	numA	numC	numG	numT	numN	[del	SumACGT	numNonzeroACGT	Ref	Nonref]
 
 
-	my $nucleotide_report 	= $save_dir . "/" . $prefix . ".nuc.tally.xls";
-	my $codon_report 		= $save_dir . "/" . $prefix . ".codon.tally.xls";
-	my $amino_acid_report 	= $save_dir . "/" . $prefix . ".aa.tally.xls";
+	my $nucleotide_report 	= $prefix . ".nuc.tally.xls";
+	my $codon_report 		= $prefix . ".codon.tally.xls";
+	my $amino_acid_report 	= $prefix . ".aa.tally.xls";
 
 	my $nucleotide_report_fh 	= open_to_write("$nucleotide_report");
 	my $codon_report_fh 		= open_to_write("$codon_report");
@@ -371,12 +373,12 @@ sub remove_one_from_tally {
 }
 #-----------------------------------------------------------------------------
 sub print_merged_report {
-	my ($nuc_aa_codon_tally, $label, $gene, $CODON, $cds, $save_dir, $prefix) = @_;
+	my ($nuc_aa_codon_tally, $label, $gene, $CODON, $cds, $prefix) = @_;
 	# Print Reports to filehandles $nucleotide_report_fh, $codon_report_fh, and $amino_acid_report_fh
 	#name(gene:aminoAcidPosition:consensusAminoAcid)	gene nucleotidePosition refNucleotide consensusNucleotide aminoAcidPosition refCodon	consensusCodon	refAminoAcid	consensusAminoAcid	Sample	coverageDepth	topNucleotide	secondNucleotide	thirdNucleotide	otherNucleotide	countTopNucleotide	countSecondNucleotide	countThirdNucleotide	countOtherNucleotide	topCodon	secondCodon	thirdCodon	otherCodon	countTopCodon	countSecondCodon	countThirdCodon	countOtherCodon	topAminoAcid	secondAminoAcid	thirdAminoAcid	otherAminoAcid	countTopAminoAcid	countSecondAminoAcid	countThirdAminoAcid	countOtherAminoAcid
 	# $nuc_aa_codon_tally format example: $nuc_aa_codon_tally->{'aa'}->{$pos}->{$aa}++;
 	
-	my $merged_report 		= $save_dir . "/" . $prefix . ".merged.tally.xls";
+	my $merged_report 		= $prefix . ".merged.tally.xls";
 
 	my $merged_report_fh		= open_to_write("$merged_report");
 
@@ -534,7 +536,7 @@ sub print_top_hits_alternative {
 }
 #-----------------------------------------------------------------------------
 sub print_variants {
-	my ($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $save_dir, $prefix, $start_time, $verbose) = @_;
+	my ($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $prefix, $start_time, $verbose) = @_;
 	# Filters the variants (nuc, aa, codon) for those that are above a certain threshold in frequency and then performs linkage disequilibrium in a pairwise manner for all variants at level of nuc, codon, or aa.
 	
 	# First get the variants that are above a frequency threshold
@@ -547,7 +549,7 @@ sub print_variants {
 	 	# Coverage is the number of reads at this position
 	 	# Frequency is count/coverage
 
-	my $variants			= $save_dir . "/" . $prefix . ".variants.minfreq".$variant_threshold.".xls";		# Maybe add threshold to the name.  Or in the header of the file.
+	my $variants			= $prefix . ".variants.minfreq".$variant_threshold.".xls";		# Maybe add threshold to the name.  Or in the header of the file.
 
 	my $variants_fh 		= open_to_write("$variants");
 
