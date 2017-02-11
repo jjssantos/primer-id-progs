@@ -139,7 +139,7 @@ Notes:
 1. Recommended h_vmem (RAM) value per thread is 6G, although it may be fine with less, 
 	depending on the size and complexity of your input file. 
 2. If running more than 20,000 sequences, it is recommended to split the file and run each
-	separately,	saving the output into a single directory, then merging the results with 
+	separately, saving the output into a single directory, then merging the results with 
 	merge_tally.pl
 ";
 

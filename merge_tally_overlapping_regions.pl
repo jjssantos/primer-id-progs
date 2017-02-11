@@ -70,6 +70,11 @@ OPTIONS:
 			received as arguments
 --output	Output file.  Prints to STDOUT by default.  
 --label		Sample ID.  All files should be for the same sample. Default is 'Sample_1'.
+
+Notes:
+1. merge_tally.pl is recommended for a full merge of the output of the tally files from 
+convert_reads_to_amino_acid.pl.  merge_tally.pl replaces this script and this script will
+be removed in a future release.
 ";
 
 # Change log

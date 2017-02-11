@@ -79,11 +79,10 @@ GetOptions('save=s' => \$save,
 
 my $usage = "
 merge_tally.pl takes a directory containing output from convert_reads_to_amino_acid.pl  
-as well as a reference coding sequence and merges the results.  The merged results are
-output as frequency tables of nucleotide, codon, and amino acid sequence by position --
-the same format as the output to convert_reads_to_amino_acid.pl.  A merged table containing 
-frequencies for all three is also produced.  For now, Phylip files for nucleotide and 
-peptide sequence are not merged.
+and merges the results.  The merged results are  output as frequency tables of nucleotide, 
+codon, and amino acid sequence by position -- the same format as the output to 
+convert_reads_to_amino_acid.pl.  A merged table containing frequencies for all three is also 
+produced.  For now, Phylip files for nucleotide and peptide sequence are not merged.
 
 Required Arguments:
 --d/--dir/-i/--input 	Directory containing files to merge.
