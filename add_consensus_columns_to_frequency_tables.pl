@@ -33,7 +33,7 @@ LINE: while(<$readfh>){
 	else {
 		my $consensus_residue = $line[4];
 		my $nuc_or_aa = nuc_or_aa($residue_to_header_index);
-		if ( ($consensus_residue eq 'N' && $nuc_or_aa eq 'nuc') || ($consensus_residue eq 'X' && $nuc_or_aa eq 'aa') ){	# consensus (majority) nucleotide residue is N or consensus (majority) amino acid residue is X (resulting from a codon that has a non-wobble N (can't determine aa from codon)
+		if ( ($consensus_residue eq 'N' && $nuc_or_aa eq 'nuc') || ($consensus_residue eq 'X' && $nuc_or_aa eq 'aa') || ($consensus_residue !~ m/^[A-Z]$/i) ){	# consensus (majority) nucleotide residue is N or consensus (majority) amino acid residue is X (resulting from a codon that has a non-wobble N (can't determine aa from codon).  Or if the consensus is not in the 5th column...
 			$consensus_residue = find_consensus_residue_manually(\@line,$residue_to_header_index);
 		}
 		my ($unambig_coverage,$consensus_count,$nonconsensus_count,$major_alt_allele,$major_alt_allele_count) = (0,0,0,"",0);
@@ -66,8 +66,8 @@ sub map_residues_to_header_indexes {
 	my $header = shift;	# arrayref
 	my $map;	# hashref where keys are residues (aa or nuc) and value is the index in the header to find this residue
 	for (my $i = 0; $i < @$header; $i++){
-		if ( (@header < 15 && $header->[$i] =~ m/^num([A-MO-WY])$/) || (@header > 15 && $header->[$i] =~ m/^num([A-WY])$/) ){		# All amino acids and nucleotides; not including "X", "*", "-", or "Other".  "N" is included for aa but not for nuc.  
-			$map->{$1} = $i;
+		if ( (@header < 15 && $header->[$i] =~ m/^(num)?([A-MO-WY])$/) || (@header > 15 && $header->[$i] =~ m/^(num)?([A-WY])$/) ){		# All amino acids and nucleotides; not including "X", "*", "-", or "Other".  "N" is included for aa but not for nuc.  
+			$map->{$2} = $i;
 		} 
 	}	
 	return $map;
