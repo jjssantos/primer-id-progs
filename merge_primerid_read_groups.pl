@@ -269,7 +269,10 @@ OPTIONS:
 # 2016-06-18
 # UPdated samtools in repo to 1.3.  Added bcftools, vcfutils and seqtk to the repo. 
 #	Requires samtools, bcftools, vcfutils.pl and seqtk on the PATH.  
-
+# 2017-02-11
+# Added base counts before and after merging primerid groups so we can do noise correction.
+# 2017-02-25
+# Fixed a bug in counting up total bases in input reads  
 
 unless ($files||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
@@ -744,7 +747,11 @@ sub make_consensus {
 	
 	# Set up shared variables to store data.
 	my (@ambiguous,@good,@ambiguous_positions,@min_freq_positions);	 # arrays to save or count the number of primerid groups that are completely good or that have one or more ambiguous character.  For @good and @ambiguous, each element is an arrayref with primerID and consensus sequence.  @ambiguous_positions will have an array of all ambiguous positions found in the reads; this array can't be used to count the number of ambiguous sequences since some sequences will have multiple ambiguous sequences.
-	$pl->share(\@ambiguous, \@good, \@ambiguous_positions, \@min_freq_positions);
+	my @converted_base_counts;		# Array to store the number of converted bases in each read.  A "converted base" means the number of bases in a column in the alignment that differ from the consensus, assuming that the consensus is not an ambiguous character.  
+	my @ambiguous_base_counts;		# Array to store the number of bases that became an ambiguous nucleotide in the output due to lack of a majority consensus, or majority nucleotide fraction being below the --min_freq option.
+	my @total_base_counts; 			# Array to store the number of total bases in each read.  This can serve as the denominator.  
+
+	$pl->share(\@ambiguous, \@good, \@ambiguous_positions, \@min_freq_positions, \@converted_base_counts, \@ambiguous_base_counts, \@total_base_counts);
 	
 	$pl->while( sub {$count++; $primerID = $primerIDs[$count - 1]; },	sub {			# was $pl->foreach( \@primerIDs,	sub {	
 #		$primerID  = $_; 
@@ -822,6 +829,9 @@ sub make_consensus {
 		my $ambig_pos; 	# Hashref of ambiguous positions where key is position and value is an AoA of the tied bases and their counts.
 		my $nongap_ambig_count = 0; 
 		my $ambig_summary_for_fasta_header_def = "";	# String to add to fasta header after the primerID.  positions and ambiguous characters that were found outside of the gap.  Helpful for understanding why a read was put in the ambig fasta file.  
+		my $total_base_count = 0;	# Use to store the number of total bases seen in the alignment, to be saved to @total_base_counts after reviewing all columns in the alignment.  Don't include gap characters; only ACTGN
+		my $total_converted_base_count = 0;		# Use to store the number of total bases that differ from the consensus in columns passing min_freq.  To be saved to @converted_base_counts
+		my $total_ambig_base_count = 0;			# Use to store the number of total bases in columns where the no consensus is called due to not passing min_freq or no clear majority.  To be saved to @ambiguous_base_counts.
 		my $res_num = 1;		# Residue number.  This is the position of the residue within the final consensus sequence.  
 		my @this_min_freq_positions;
 		for (my $pos = 1; $pos <= $len; $pos++){		# $pos is the position in the alignment.  It is usually the same as $res_num, residue number, except when there is an indel (-)
@@ -833,6 +843,7 @@ sub make_consensus {
 			}
 			foreach my $res (keys %count) {
 #								if($verbose){		printf "Pos: %2d  Res: %s  Count: %2d\n", $pos, $res, $count{$res};		}
+				$total_base_count += $count{$res} if ($res =~ m/[ACTGN]/i);		# Count all real bases in the column.  Don't count gaps.
 			}		
 			my ($max_key_value) = find_key_with_biggest_value(\%count,2,1);	# returns arrayref of results, including ties
 #								if($verbose){	if (scalar(keys %count)>1){	my $top = find_key_with_biggest_value(\%count); printf "Pos: %2d  Res: %s  Count: %2d\n", $pos, $top, $count{$top};	}	}
@@ -853,7 +864,8 @@ sub make_consensus {
 				if ($tiebreaker){
 					# Assign sample consensus residue 
 					$res = substr($aligned_ref_seq, $pos - 1, 1);	# Check is it right?  yes, it's getting the right base, even with a gap.  
-					if ($verbose){	print STDERR "assign sample cons: $pos, $res\n"; 	}
+					if ($verbose){	print STDERR "assign sample cons: $pos, $res\n"; 	}					
+					$total_converted_base_count += tally_nonconsensus_bases(\%count, $res);
 				}
 				else {
 					# Assign ambiguous IUPAC residue or N
@@ -872,6 +884,7 @@ sub make_consensus {
 						$res = $iupac->{$ambig_res};				
 					}
 	#				$ambig_summary_for_fasta_header_def .= " " . $res_num . uc($res);	# add the position and resulting ambiguous character to the fasta header.  Do below instead...
+					$total_ambig_base_count += $total_base_count;	# Assign all of the bases in this column ($total_base_count) to the $total_ambig_base_count
 				}
 			}
 			else {	
@@ -881,8 +894,14 @@ sub make_consensus {
 				# Also check frequency.  By default, a basic "majority rule" is in effect.  This is an additional filter that will require that the frequency for the majority is above a certain threshold, e.g., 2/3
 				my $max_freq = $max_key_value->[0]->[1] / total(values %count);
 				if ($min_freq && $max_freq < $min_freq){
-					$res = "N"; 	# assign ambiguous
+					# Then there was a clear majority, but the frequency didn't pass $min_freq.  Assign ambiguous
+					$res = "N"; 	# assign ambiguous.  Maybe this should be smarter, to assign ambiguity based on the bases that were seen...
 					push @this_min_freq_positions, $res_num;
+					$total_ambig_base_count += $total_base_count;	# Assign all of the bases in this column ($total_base_count) to the $total_ambig_base_count
+				}
+				else {
+					# $res is clear majority, and also passing min_freq.
+					$total_converted_base_count += tally_nonconsensus_bases(\%count, $res);
 				}
 			}
 			
@@ -926,7 +945,6 @@ sub make_consensus {
 			$res_num++ unless ($res =~ m/-/);	# Residues that have a gap as a consensus (non-ambiguous) are usually indels.  They shouldn't be assigned a position in the final consensus sequence.  
 		}	# Done reading each position in the alignment
 		
-		
 #		exit if ($primerID eq "GTGTCCAGGC");		# This was for testing on a primerID group with an insertion in one of the sequences.
 		
 		# Concatenate the bases to make the consensus sequence.
@@ -963,7 +981,12 @@ sub make_consensus {
 		}
 		push @ambiguous_positions, @ambig_pos; 		# Add the whole array of ambiguous positions to the shared array of ambiguous positions
 		push @min_freq_positions, \@this_min_freq_positions;	# Add arrayref of nucleotide positions where an ambiguous base was called because the maximum base called was less than --min_freq
-		
+
+		# Save the base counts (total, converted, ambig) to their respective arrays
+		push @total_base_counts, $total_base_count;
+		push @converted_base_counts, $total_converted_base_count;
+		push @ambiguous_base_counts, $total_ambig_base_count;
+				
 	}
 	); 	### End of Parallel Loop
 	
@@ -974,6 +997,9 @@ sub make_consensus {
 	printf STDERR "Consensus reads not reported with > $ambig non-gap ambiguities: %2d (%.3f)\n", $ambig_count, $ambig_count/($ambig_count + $good_count) if ($ambig_count);
 	printf STDERR "Consensus reads reported: %2d (%.3f)\n", $good_count, $good_count/($ambig_count + $good_count) if($good_count);
 
+
+	my $total_bases_in_merged_reads = 0;
+
 	# Save the results
 	if (@good){
 		print STDERR "Writing consensus sequences to $out_file_good\n";
@@ -982,6 +1008,7 @@ sub make_consensus {
 			my ($id,$seq) = @{$_};
 			$seq = uc($seq);		# fastx toolkit requires uppercase characters.  
 			print $writefh ">$id\n$seq\n";
+			$total_bases_in_merged_reads += length($seq);
 		}
 		close($writefh);
 	}
@@ -994,6 +1021,7 @@ sub make_consensus {
 			my ($id,$seq) = @{$_};
 			$seq = uc($seq);		# fastx toolkit requires uppercase characters.  
 			print $ambigfh ">$id\n$seq\n";
+			$total_bases_in_merged_reads += length($seq);
 		}
 		close($ambigfh);
 	}
@@ -1019,22 +1047,47 @@ sub make_consensus {
 		my $min_freq_read_count = scalar(@min_freq_positions);
 		print STDERR "Reads with ambiguous bases due to min_freq: $min_freq_read_count\n";
 		my %min_freq_pos;
-                foreach my $read (@min_freq_positions){
-                        foreach my $pos (@$read){
+        foreach my $read (@min_freq_positions){
+            foreach my $pos (@$read){
 				$min_freq_pos{$pos}++;
 			}
-                }
-                print STDERR "\nAmbiguous positions due to min_freq threshold:\n#Position\tcount\n";
-                foreach my $res_num (sort { $a <=> $b } keys %min_freq_pos){               # Sort in ascending order by position
-                        print STDERR "$res_num\t$min_freq_pos{$res_num}";
-                        if (($res_num >= $middle[0]) && ($res_num <= $middle[1])){
-                                print STDERR "\tGAP";
-                        }
-                        print STDERR "\n";
-                }
-
+        }
+        print STDERR "\nAmbiguous positions due to min_freq threshold:\n#Position\tcount\n";
+        foreach my $res_num (sort { $a <=> $b } keys %min_freq_pos){               # Sort in ascending order by position
+            print STDERR "$res_num\t$min_freq_pos{$res_num}";
+            if (($res_num >= $middle[0]) && ($res_num <= $middle[1])){
+                    print STDERR "\tGAP";
+            }
+            print STDERR "\n";
+        }
 	}
+	# Print out Base counts
+	my $total_base_count = total(\@total_base_counts);
+	my $total_converted_base_count = total(\@converted_base_counts);
+	my $total_ambig_base_count = total(\@ambiguous_base_counts);
+	my $remaining_ambig_base_in_merged_reads = scalar(@ambiguous_positions) + scalar(@min_freq_positions);
+	print STDERR "\nTotal ambiguous bases in the merged reads:\t$remaining_ambig_base_in_merged_reads\n"; 
+	print STDERR "Total bases in the merged reads:\t$total_bases_in_merged_reads\n";
+	print STDERR "\n";
+	print STDERR "Total bases in input reads:\t$total_base_count\n";
+	print STDERR "Bases from input reads converted to consensus:\t$total_converted_base_count\n";
+	print STDERR "Bases from input reads converted to ambiguous:\t$total_ambig_base_count\n";
+
 	
+}
+#-----------------------------------------------------------------------------
+sub tally_nonconsensus_bases {
+	# Takes a hash of bases for a single column in the alignment and a consensus base
+	# Counts of all of the real bases (i.e., ACTGN, no gap) that are not the consensus base
+	my ($counts, $cons) = @_;
+
+	my $number_noncons = 0;
+
+	foreach my $res (keys %$counts){
+		$number_noncons += $counts->{$res}  if ($res =~ m/[ACTGN]/i && $res ne $cons);
+	}
+
+	return $number_noncons;
 }
 #-----------------------------------------------------------------------------
 sub read_bam_old {
@@ -1225,7 +1278,7 @@ sub make_consensus_old {
 		my $number_seqs = scalar(@{$read_tally->{$barcode}->{sequence}});
 		next if ($number_seqs < $min_reads);		# Only consider those barcode groups with at least 2 sequences.
 		my @ref = split(//, $read_tally->{$barcode}->{reference});
-#				print join " ", @ref; 
+	#				print join " ", @ref; 
 		my @consensus;		#Array containing the bases in the new consensus
 		my @combined_qualities;	#Array containing the combined qualities scores in order
 		
@@ -1238,7 +1291,7 @@ sub make_consensus_old {
 					my $base = $read_tally->{$barcode}->{sequence}->[$j]->[$i];
 					$base_tally{$base}++;
 				} else {
-#							print Dumper($read_tally->{$barcode});
+	#							print Dumper($read_tally->{$barcode});
 				}
 			}
 			if ($debug){	print Dumper(\%base_tally);		}
@@ -1382,7 +1435,7 @@ sub combine_pvalues {
 	my $sum_log_pvalues = total(\@log_pvalues);
 	my $chisq = -2 * $sum_log_pvalues;
 	my $combined_pvalue = Statistics::Distributions::chisqrprob ($df,$chisq);
-#					print "pvalues: ", join " ", @$pvalues, "\nlog pvalues: ", @log_pvalues, "\n";
+	#					print "pvalues: ", join " ", @$pvalues, "\nlog pvalues: ", @log_pvalues, "\n";
 			if ($debug){	print "chisq: $chisq combined p-value: $combined_pvalue\n";	 }
 	unless ($combined_pvalue){	
 		# combined p-value is 0.  This happens when you have ~30 reads in a barcode group, so the combined p-value is too strong.  
