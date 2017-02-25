@@ -12,6 +12,7 @@ my $exe = basename($0);
 
 my $usage = "$exe <input aa/nuc.tally.xls>
 Prints to STDOUT.  Takes aa or nuc tally.xls file as input (not codon).
+Also takes Vivan nucleotideRate.csv file.
 ";
 
 die $usage unless $ARGV[0];
@@ -31,6 +32,7 @@ LINE: while(<$readfh>){
 		next LINE;
 	} 
 	else {
+		@line = @line[0..$#header] if (scalar(@line) > scalar(@header));		# Get rid of values in columns without a header, e.g., nucleotideRate.csv from Vivan sometimes has extra data in unlabeled columns...
 		my $consensus_residue = $line[4];
 		my $nuc_or_aa = nuc_or_aa($residue_to_header_index);
 		if ( ($consensus_residue eq 'N' && $nuc_or_aa eq 'nuc') || ($consensus_residue eq 'X' && $nuc_or_aa eq 'aa') || ($consensus_residue !~ m/^[A-Z]$/i) ){	# consensus (majority) nucleotide residue is N or consensus (majority) amino acid residue is X (resulting from a codon that has a non-wobble N (can't determine aa from codon).  Or if the consensus is not in the 5th column...
