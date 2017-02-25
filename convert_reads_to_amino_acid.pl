@@ -110,6 +110,7 @@ Non-standard Perl modules:
 Bioperl, including Bio::Tools::Run::Alignment::Clustalw
 Array::Utils
 Parallel::Loops
+Statistics::R;
 
 Required Arguments:
 -i/--input 	Input FASTA file.  Required.
@@ -147,26 +148,15 @@ Notes:
 
 # To Do:
 # Add option to skip bases that have an indel (or to trim it at the 3' end right before the indel).
-# Add ability to process genes/reads on - strand 
-# I should also somehow store those reads or positions that affect the translation, such as early stop codons, changing initial methionine, or changing the stop codon to another amino acid (continued translation).  Perhaps add the option to ignore amino acids following an early stop and/or labeling the amino acids of a read as untranslated if the initial methioinine is mutated...  (unfortunately, the other reads from that same quasispecies will be counted as translated, since we have short sequences and they won't all contain the initial Met.), and/or to add the amino acids following an altered stop codon.
-# Add columns Largest_Nonref_Count, Largest_Nonref_AA and Largest_Nonref_as_Fraction_of_Nonref
 # Maybe simplify the table so there aren't so many columns.  Or, I could produce a summary table that has reference, consensus, major variant, minor variants by codon.  
 # Query intergenic and non-coding regions too for nucleotides (right now, it is just looking at CDS regions)
-# Maybe save any reads that were soft-trimmed to see what sequence is there... especially if the sequence quality is good
-# Adapt script to get splice junction amino acids to use with mRNA-seq.  Right now it only works for genomic DNA or genomic RNA sequencing (i.e., introns are present).  
-# Allow a read to overlap with multiple exons.  Right now it assumes that each read will only overlap with a single exon; it finds the first exon that overlaps and then trims the read to the ends of that exon. As is, it is fine for sequencing influenza H1N1 with <250bp reads, as the introns are ~475 and ~690 bp long.  As long as the template is genomic DNA, the reads won't overlap two exons; if the template is mRNA, then they could very easily overlap two exons.  Also, I would possibly have to align with TopHat instead of BWA.  Will says template is genomic RNA and probably always will be.  
-	# Might be able to use gff output to splice together exon sequences.  Also cigar output (convert Ds to Is) for gaps, etc.  
 # Make the clustalw Perl modules and some others optional based on input options (eval...)
 
-# Output stats about each codon present as well.  Should probably be a separate file.  
-	# Having the amino acid-level analysis will also be useful, but I can do this in excel for now. We would most certainly want to do  synonymous/non-synonymous comparisons for each codon at some point. 
-	# Tally up amino acids.  
 # Ways to potentially make it more amenable to a multi-threaded pipeline
 	# Print out separate file of reads/peptides per gene and run linkage disequilibrium for each gene in parallel
 	# Also run nuc, aa, and codon linkage disequilibrum and/or dN/dS in parallel
 # * Print out graphs for frequencies so we can see variants in positions.  
 # Use Exonerate to deal with exons.  Align CDS to reads with est2genome.
-# Change --fasta to --ref
 # Maybe let BAM be an option as input... (keep read_bam and some other subroutines that work with bam files)
 # Maybe let FASTQ be an option as input too/instead?
 # Allow user to specify temp directory instead of using /tmp/
@@ -185,6 +175,9 @@ Notes:
 # Added --fullpeptide option.  
 # 2013-05-28
 # Lots of changes!  Nearly a full rewrite.  Including adding multiple reports (nuc, aa, codon frequency tables, merged table, variants above a threshold frequency, and cleanpeptides and cleanreads output files)
+	# Output stats about each codon present as well.  Should probably be a separate file.  
+		# Having the amino acid-level analysis will also be useful, but I can do this in excel for now. We would most certainly want to do  synonymous/non-synonymous comparisons for each codon at some point. 
+		# Tally up amino acids.  
 # Didn't change the method to clean up the reads (in read_bam).  That stayed the same.  
 # Calculate consensus reference, make comparisons against that.    
 # Count up the codons, report synonymous, nonsyn with respect to the consensus.  
@@ -225,6 +218,7 @@ Notes:
 # 2014-01-09
 # Changed temporary directory to be in /tmp/ instead of Cwd.  
 # 2014-01-10
+# Change --fasta to --ref
 # Changed --fasta input to --ref (and changed one section where I had used variable $ref to $ref_sequence)
 # Changed output extensions to use dots '.' instead of underscores.
 # 2014-01-14
@@ -325,7 +319,7 @@ my $unique_seqs_file = get_unique_seqs($input, $prefix);
 
 my $nuc_aa_codon_tally = read_input_reads($unique_seqs_file, $prefix);
 	#			print Dumper($nuc_aa_codon_tally); exit;
-print_reports($nuc_aa_codon_tally, $label, $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $prefix, $verbose, $debug);		
+print_reports($nuc_aa_codon_tally, $label, $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $prefix, $start_time, $verbose, $debug);		
 
 print_merged_report($nuc_aa_codon_tally, $label, $gene, \@CODON, $cds, $prefix);	
 
