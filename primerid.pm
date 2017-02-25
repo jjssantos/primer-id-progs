@@ -12,6 +12,7 @@ use Data::Dumper;
 use Cwd;
 use File::Basename;
 use Array::Utils qw(:all);
+use Statistics::R;
 
 # Custom
 use aomisc;
@@ -47,6 +48,14 @@ our @EXPORT = qw(
 # 2017-02-11
 # Removed $save_dir as input, using $prefix alone ($prefix can contain absolute 
 # or relative path).
+# 2017-02-15
+# Added cMAF cMAF_95%_CI_low cMAF_95%_CI_high medianUnambigFreq 
+# median95%ConfIntHigh passThreshold columns to the output tally files for nuc, 
+# codon, aa.  Added 95%_CI_low 95%_CI_high columns to variant report.  Moved 
+# some code from print_reports to a new sub get_unambig_values, and added new
+# subs get_confidence_interval and get_median_unambig_freq.  
+
+
 
 #-------------------------------------------------------------------------------
 #----------------------------------- FUNCTIONS ---------------------------------
@@ -161,11 +170,15 @@ sub make_codon_to_aa_hash {
 }
 #-----------------------------------------------------------------------------
 sub print_reports {
-	my ($nuc_aa_codon_tally, $label, $gene, $NUC, $CODON, $AA, $cds, $converter, $prefix, $verbose, $debug) = @_;
+	my ($nuc_aa_codon_tally, $label, $gene, $NUC, $CODON, $AA, $cds, $converter, $prefix, $start_time, $verbose, $debug) = @_;
 	# Print Reports to filehandles $nucleotide_report_fh, $codon_report_fh, and $amino_acid_report_fh
 	# TO DO: Add more documentation about the input data format ($cds, $nuc_aa_codon_tally, etc.)
 
 	#name(chr:gene:aminoAcidPosition:consensusAminoAcid)	chr	gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	Sample	coverageDepth	numA	numC	numG	numT	numN	[del	SumACGT	numNonzeroACGT	Ref	Nonref]
+
+	# To make things a little less redundant, I could put the medianUnambigFreq and median95%ConfIntHigh in the header (rather than having it in every single row...), e.g, in a line starting with ##, but then I would need to do more modifications in the other scripts to skip lines starting with ##, especially scripts that use the get_header subroutine...
+	print STDERR "Printing out frequency tables. ";
+	&elapsed($start_time, 'Elapsed', $verbose);
 
 
 	my $nucleotide_report 	= $prefix . ".nuc.tally.xls";
@@ -177,7 +190,7 @@ sub print_reports {
 	my $amino_acid_report_fh 	= open_to_write("$amino_acid_report");
 
 	print $nucleotide_report_fh "#name\t";
-	print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele );
+	print $nucleotide_report_fh join "\t", qw(gene nucleotidePosition refNucleotide consensusNucleotide refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele cMAF cMAF_95%_CI_low cMAF_95%_CI_high medianUnambigFreq median95%ConfIntHigh passThreshold);
 	print $nucleotide_report_fh "\tnum"; 
 	print $nucleotide_report_fh join "\tnum", @$NUC, "Other";
 	# print $nucleotide_report_fh "\t"; 
@@ -185,7 +198,7 @@ sub print_reports {
 	print $nucleotide_report_fh "\n";
 
 	print $codon_report_fh "#name\t";
-	print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele);		#  unambigCoverageDepth numConsensus numNonConsensus numMajorAltAllele majorAltAllele
+	print $codon_report_fh join "\t", qw(gene codonPosition refCodon consensusCodon refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele cMAF cMAF_95%_CI_low cMAF_95%_CI_high medianUnambigFreq median95%ConfIntHigh passThreshold);		#  unambigCoverageDepth numConsensus numNonConsensus numMajorAltAllele majorAltAllele
 	print $codon_report_fh "\tnum"; 
 	print $codon_report_fh join "\tnum", @$CODON, "Other";
 	# print $codon_report_fh "\t"; 
@@ -193,7 +206,7 @@ sub print_reports {
 	print $codon_report_fh "\n";
 
 	print $amino_acid_report_fh "#name\t";
-	print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele); 
+	print $amino_acid_report_fh join "\t", qw(gene aminoAcidPosition refAminoAcid consensusAminoAcid refDiffConsensus Sample coverageDepth unambigCoverageDepth unambigConsensus numUnambigConsensus numUnambigNonConsensus majorAltAllele numMajorAltAllele cMAF cMAF_95%_CI_low cMAF_95%_CI_high medianUnambigFreq median95%ConfIntHigh passThreshold); 
 	print $amino_acid_report_fh "\tnum"; 
 	print $amino_acid_report_fh join "\tnum", @$AA, "Other";  		# Needed to add "num" before amino acids, since R converts _ to "X_" and * to "X."
 	# print $amino_acid_report_fh "\t"; 
@@ -206,9 +219,11 @@ sub print_reports {
 	for (@all_codons){
 		s/:.+//;		# Was s/:\w+//;  changed to s/:.+//; for numTAA:* and others with *
 	}
-		
+	
+	my $R = Statistics::R->new();		# Open a bridge to R, to pass to get_median_unambig_freq or get_confidence_int sub. 
 	
 	foreach my $type (qw(nuc codon aa)){		#e.g., $nuc_aa_codon_tally->{'aa'}->{$pos}->{$aa}++;
+		my ($median_unambig_freq,$median_high_conf_int) = get_median_unambig_freq($R, $nuc_aa_codon_tally, $type, $converter, $verbose);		# Get the median unambig_nonconsensus_frequency and the high end of the 95% confidence interval for this amplicon or dataset (for this type).  This can be used as a threshold of confidence that a variant is real
 		foreach my $pos (sort {$a <=> $b} keys %{$nuc_aa_codon_tally->{$type}}){
 			my $ref_sequence = $cds->{$type}->{$pos};
 			unless ($ref_sequence){
@@ -224,57 +239,25 @@ sub print_reports {
 			my $coverage = total(values(%{$nuc_aa_codon_tally->{$type}->{$pos}})); 
 
 			# Also compute values for columns: unambigCoverageDepth	unambigConsensus numUnambigConsensus	numUnambigNonConsensus	numMajorAltAllele	majorAltAllele
-				# unambigCoverageDepth.  Compute coverage depth for non-ambiguous residues.  For amino acid coverage, only consider regular amino acids (not *, X, or -).  For nuc, only consider A, C, T, G (not N).  For codon, only consider codons with A, C, T, and G (not codons with N).
-				# unambigConsensus.  If Consensus residue is an ambiguous residue, report the next most abundant non-ambiguous residue, otherwise, report the consensus.  
-				# numUnambigConsensus.  Report the tally number for the consensus allele.  Report '0' if the consensus is an ambiguous residue.
-				# numUnambigNonConsensus.  Sum up all residues other than the consensus allele, not including ambiguous residues.  Should be equal to unambigCoverageDepth - numUnambigConsensus.  
-				# majorAltAllele.  This is the major alternate allele (i.e., second highest count after the consensus residue, not including ambiguous characters)
-				# numMajorAltAllele.  This is the tally number for the majorAltAllele. 
-			my $unambig_residues = get_unambig_tally($nuc_aa_codon_tally->{$type}->{$pos}, $type, $converter);	 # Returns hashref with the ambiguous residues removed
-			my $unambig_coverage = total(values(%$unambig_residues));
-			my $unambig_consensus_with_num = find_key_with_biggest_value($unambig_residues, 2);
-			my ($unambig_consensus,$num_unambig_consensus) = split(/, /, $unambig_consensus_with_num);
-			my $num_unambig_nonconsensus = $unambig_coverage - $num_unambig_consensus;
-			my $tally_without_consensus = remove_one_from_tally($unambig_residues,$unambig_consensus);
-			my ($major_alt_allele,$num_major_alt_allele) = ("", 0);	# Default empty, in case there is no alternate allele.
-			if (%$tally_without_consensus){
-				# Then there are alternate allele(s)
-				my $major_alt_alleles = find_key_with_biggest_value($tally_without_consensus, 2, 1);	# returns AoA of all max alleles (will usually be an AoA with just one entry, but will have multiple entries if there is a tie for the max number)
-				my @alt_alleles;
-				my @alt_counts;
-				foreach (@$major_alt_alleles){
-					my ($alt,$count) = @$_;
-					#print STDERR "alt: $alt, $count\n";
-					push @alt_alleles, $alt;
-					push @alt_counts, $count;
-				}
-				$major_alt_allele = join ",", @alt_alleles;
-				$num_major_alt_allele  = join ",", @alt_counts;
-			}
-			
-			if ($verbose){		# $num_unambig_nonconsensus > 0 && 
-				print STDERR "\n$pos, $type\n";
-				print STDERR Dumper($nuc_aa_codon_tally->{$type}->{$pos});
-				print STDERR "unambig\n";
-				print STDERR Dumper($unambig_residues);
-				print STDERR "unambig_cov: $unambig_coverage\n";
-				print STDERR "tally without consensus\n";
-				print STDERR Dumper($tally_without_consensus);
-				print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n\n";
-				#exit;
-			}
+			my ($unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele) = get_unambig_values($nuc_aa_codon_tally, $type, $pos, $converter, $verbose);
+			my ($cMAF,$low,$high,$pass_threshold) = ("","","","no");
+			if ($unambig_coverage > 0){
+				$cMAF = sprintf("%.5f", $num_unambig_nonconsensus / $unambig_coverage);		# Assign cumulative Minor Allele Frequency (if there are some unambiguous residues)
+				($low,$high) = get_confidence_interval($R, $num_unambig_nonconsensus, $unambig_coverage);
+				$pass_threshold = "yes" if ($low > $median_high_conf_int);
+			} 
 
 			# Now print the counts, number of amino acids represented, ref aa counts, and nonref aa counts.
 			if ($type eq 'nuc'){
-				print $nucleotide_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
+				print $nucleotide_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele, $cMAF, $low, $high, $median_unambig_freq, $median_high_conf_int, $pass_threshold;
 				print_tally_line($nucleotide_report_fh, 	$nuc_aa_codon_tally->{$type}->{$pos}, $NUC);
 			}
 			elsif($type eq 'codon'){
-				print $codon_report_fh 		join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
+				print $codon_report_fh 		join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele, $cMAF, $low, $high, $median_unambig_freq, $median_high_conf_int, $pass_threshold;
 				print_tally_line($codon_report_fh, 		$nuc_aa_codon_tally->{$type}->{$pos}, \@all_codons);
 			}
 			else {
-				print $amino_acid_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele;
+				print $amino_acid_report_fh join "\t", $name, $gene, $pos, $ref_sequence, $consensus, $diff, $label, $coverage, $unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele, $cMAF, $low, $high, $median_unambig_freq, $median_high_conf_int, $pass_threshold;
 				print_tally_line($amino_acid_report_fh, 	$nuc_aa_codon_tally->{$type}->{$pos}, $AA);
 			}
 		}
@@ -283,6 +266,52 @@ sub print_reports {
 	close($nucleotide_report_fh);
 	close($codon_report_fh);
 	close($amino_acid_report_fh);
+}
+#-----------------------------------------------------------------------------
+sub get_unambig_values {
+	# This subroutine computes values for a single position: unambigCoverageDepth	unambigConsensus numUnambigConsensus	numUnambigNonConsensus	numMajorAltAllele	majorAltAllele
+		# unambigCoverageDepth.  Compute coverage depth for non-ambiguous residues.  For amino acid coverage, only consider regular amino acids (not *, X, or -).  For nuc, only consider A, C, T, G (not N).  For codon, only consider codons with A, C, T, and G (not codons with N).
+		# unambigConsensus.  If Consensus residue is an ambiguous residue, report the next most abundant non-ambiguous residue, otherwise, report the consensus.  
+		# numUnambigConsensus.  Report the tally number for the consensus allele.  Report '0' if the consensus is an ambiguous residue.
+		# numUnambigNonConsensus.  Sum up all residues other than the consensus allele, not including ambiguous residues.  Should be equal to unambigCoverageDepth - numUnambigConsensus.  
+		# majorAltAllele.  This is the major alternate allele (i.e., second highest count after the consensus residue, not including ambiguous characters)
+		# numMajorAltAllele.  This is the tally number for the majorAltAllele. 
+	my ($nuc_aa_codon_tally, $type, $pos, $converter, $verbose) = @_;
+
+	my $unambig_residues = get_unambig_tally($nuc_aa_codon_tally->{$type}->{$pos}, $type, $converter);	 # Returns hashref with the ambiguous residues removed
+	my $unambig_coverage = total(values(%$unambig_residues));
+	my $unambig_consensus_with_num = find_key_with_biggest_value($unambig_residues, 2);
+	my ($unambig_consensus,$num_unambig_consensus) = split(/, /, $unambig_consensus_with_num);
+	my $num_unambig_nonconsensus = $unambig_coverage - $num_unambig_consensus;
+	my $tally_without_consensus = remove_one_from_tally($unambig_residues,$unambig_consensus);
+	my ($major_alt_allele,$num_major_alt_allele) = ("", 0);	# Default empty, in case there is no alternate allele.
+	if (%$tally_without_consensus){
+		# Then there are alternate allele(s)
+		my $major_alt_alleles = find_key_with_biggest_value($tally_without_consensus, 2, 1);	# returns AoA of all max alleles (will usually be an AoA with just one entry, but will have multiple entries if there is a tie for the max number)
+		my @alt_alleles;
+		my @alt_counts;
+		foreach (sort @$major_alt_alleles){
+			my ($alt,$count) = @$_;
+			#print STDERR "alt: $alt, $count\n";
+			push @alt_alleles, $alt;
+			push @alt_counts, $count;
+		}
+		$major_alt_allele = join ",", @alt_alleles;
+		$num_major_alt_allele  = join ",", @alt_counts;
+	}
+	
+	if ($verbose){		# $num_unambig_nonconsensus > 0 && 
+		print STDERR "\n$pos, $type\n";
+		print STDERR Dumper($nuc_aa_codon_tally->{$type}->{$pos});
+		print STDERR "unambig\n";
+		print STDERR Dumper($unambig_residues);
+		print STDERR "unambig_cov: $unambig_coverage\n";
+		print STDERR "tally without consensus\n";
+		print STDERR Dumper($tally_without_consensus);
+		print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n\n";
+		#exit;
+	}
+	return ($unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele);
 }
 #-----------------------------------------------------------------------------
 sub print_tally_line {
@@ -537,7 +566,7 @@ sub print_top_hits_alternative {
 #-----------------------------------------------------------------------------
 sub print_variants {
 	my ($nuc_aa_codon_tally, $label, $gene, $variant_threshold, $prefix, $start_time, $verbose) = @_;
-	# Filters the variants (nuc, aa, codon) for those that are above a certain threshold in frequency and then performs linkage disequilibrium in a pairwise manner for all variants at level of nuc, codon, or aa.
+	# Filters the variants (nuc, aa, codon) for those that are above a certain threshold in frequency 
 	
 	# First get the variants that are above a frequency threshold
 		#Type\tgene\tposition\tconsensus\tvariant\tcount\tcoverage\tfrequency\n";
@@ -548,6 +577,7 @@ sub print_variants {
 	 	# Count is the count for this particular variant
 	 	# Coverage is the number of reads at this position
 	 	# Frequency is count/coverage
+	 # Compute interval of 95% confidence for variant frequency
 
 	my $variants			= $prefix . ".variants.minfreq".$variant_threshold.".xls";		# Maybe add threshold to the name.  Or in the header of the file.
 
@@ -555,10 +585,12 @@ sub print_variants {
 
 
 	print $variants_fh "## Variants above threshold frequency $variant_threshold\n";
-	print $variants_fh "#Type\tgene\tposition\tconsensus\tvariant\tcount\tcoverage\tfrequency\tfilter\n";
+	print $variants_fh "#Type\tgene\tposition\tconsensus\tvariant\tcount\tcoverage\tfrequency\tfilter\t95%_CI_low\t95%_CI_high\n";
 
 	print STDERR "Printing out variants report. ";
 	&elapsed($start_time, 'Elapsed', $verbose);
+
+	my $R = Statistics::R->new();		# Open a bridge to R, to pass to get_confidence_interval sub
 
 	my $variants_pass;	#hashref of same structure as $nuc_aa_codon_tally, only has variants to consider for linkage disequilibrium.  
 	my $max_coverage = 0; 	
@@ -587,7 +619,8 @@ sub print_variants {
 				my $count = $nuc_aa_codon_tally->{$type}->{$pos}->{$variant};
 				if ($count >= $threshold_count){
 					my $frequency = sprintf("%.5f",  $nuc_aa_codon_tally->{$type}->{$pos}->{$variant} / $coverage);
-					print $variants_fh join "\t", $type, $gene, $pos, $consensus, $variant, $count, $coverage, $frequency, $variant_filter;
+					my ($min,$max) = get_confidence_interval($R, $count,$coverage);
+					print $variants_fh join "\t", $type, $gene, $pos, $consensus, $variant, $count, $coverage, $frequency, $variant_filter, $min, $max;
 					print $variants_fh "\n";
 	#							if ($variant_filter eq "PASS"){
 	#								$variants_pass->{$type}->[$i]->{'pos'} = $pos; 
@@ -603,8 +636,48 @@ sub print_variants {
 	close($variants_fh);
 }
 #-------------------------------------------------------------------------------
+sub get_confidence_interval {
+	# This subroutine takes the $count and $coverage at a position, sends to R to run binom.test and returns the 95% confidence interval
+	# get_conf_int <- function(x, n){  t <- binom.test(as.integer(x), as.integer(n)); return(max(t$conf.int)); }
 
+	my ($R, $count, $coverage) = @_;
+
+
+#	my $R = Statistics::R->new();		# http://search.cpan.org/~fangly/Statistics-R-0.31/lib/Statistics/R.pm
+	$R->set('x', $count);
+	$R->set('n', $coverage);
+	$R->run(q`t = binom.test(as.integer(x), as.integer(n))`);
+	$R->run(q`min = min(t$conf.int)`);
+	$R->run(q`max = max(t$conf.int)`);
+	my $min = sprintf("%.5f", $R->get('min') );
+	my $max = sprintf("%.5f", $R->get('max') );
+
+	return ($min,$max);
+}
 #-------------------------------------------------------------------------------
+sub get_median_unambig_freq {
+	# This subroutine takes an individual "type" tally, e.g., aa, nuc, codon (first level in from $nuc_aa_codon_tally), 
+	# computes the unambig_coverage and unambigNonConsensus for each position of that type,
+	# determines the 95% confidence interval (CI) for each position,
+	# then computes the median frequency and high end of the 95% CI
+
+	my ($R, $nuc_aa_codon_tally, $type, $converter, $verbose) = @_;
+
+	my @unambig_freq;		# Array to store all unambiguous frequencies.  This includes all ACTG nonconsensus bases (cumulative Minor Allele Frequency or cMAF)
+	my @unambig_freq_high_conf_int;		# Array to store high end of 95% CI for all frequencies
+
+	foreach my $pos (sort {$a <=> $b} keys %{$nuc_aa_codon_tally->{$type}}){
+		my ($unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele) = get_unambig_values($nuc_aa_codon_tally, $type, $pos, $converter, $verbose);
+		if ($unambig_coverage > 0){
+			push @unambig_freq, sprintf("%.5f", $num_unambig_nonconsensus / $unambig_coverage );
+			my ($low,$high) = get_confidence_interval($R, $num_unambig_nonconsensus, $unambig_coverage);
+			push @unambig_freq_high_conf_int, $high;
+		}
+	}
+	my $median_unambig_freq = median(@unambig_freq);
+	my $median_high_conf_int = median(@unambig_freq_high_conf_int);
+	return ($median_unambig_freq,$median_high_conf_int);
+}
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
 1;

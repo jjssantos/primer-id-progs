@@ -119,15 +119,19 @@ merge_tally.pl --dir 30_S1_tallies --sample Parental --prefix 30_S1.contigs.pi.b
 # Removed --save option.  Just include any directory in the --prefix.  ($prefix can contain absolute or relative path).
 # --save		Directory in which to save files. Default = pwd.  If folder doesn\'t exist, it 
 #			will be created.
+# 2017-02-16
+# Added 6 more columns to convert_reads output, so modified this to match.  Also modified some subs in primerid.pm, so 
+# modified calls here.
+
 
 
 unless ($dir||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
-unless ($sample || $use_sample_col){	print STDERR "Please specify --sample or --use_sample_col.\n";	exit;	}
-if ($use_sample_col && $sample){
+unless (defined($sample) || $use_sample_col){	print STDERR "Please specify --sample or --use_sample_col.\n";	exit;	}
+if ($use_sample_col && defined($sample)){
 	print STDERR "Provide a sample id (--sample) or use the Sample column in the tally files (--use_sample_col), not both.\n"; 
 	exit 1;
 }
-if ($sample && $sample =~ m/[\s+,\|]/){
+if (defined($sample) && $sample =~ m/[\s+,\|]/){
 	print STDERR "Sample id invalid: $sample\n";
 	exit 1;
 }
@@ -188,7 +192,7 @@ my @samples = keys %$sample_nuc_aa_codon_tally;
 
 for (my $i = 0; $i < @samples; $i++){
 	my $prefix_with_sample = $prefix . "." . $samples[$i];
-	print_reports($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $prefix_with_sample, $verbose, $debug);		
+	print_reports($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@NUC, \@CODON, \@AA, $cds, \%converter, $prefix_with_sample, $start_time, $verbose, $debug);		
 	print_merged_report($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, \@CODON, $cds, $prefix_with_sample);	
 	print_variants($sample_nuc_aa_codon_tally->{$samples[$i]}, $samples[$i], $gene, $variant_threshold, $prefix_with_sample, $start_time, $verbose);
 }
@@ -265,7 +269,7 @@ sub read_input_tally {
 		# Store this as we're reading the input files
 
 
-	## Example input.
+	## Example input. (old -- see below for new)
 	# nuc:
 	# #name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus	Sample	coverageDepth	unambigCoverageDepth	unambigConsensus	numUnambigConsensus	numUnambigNonConsensus	majorAltAllele	numMajorAltAllele	numA	numC	numG	numT	numN	numOther
 	# HA_full:37:A	HA_full	37	A	A		151_78_S2.0.000	9922	9922	A	9889	33	G	23	9889	3	23	7	0	0
@@ -280,6 +284,13 @@ sub read_input_tally {
 	# #name	gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	refDiffConsensus	Sample	coverageDepth	unambigCoverageDepth	unambigConsensus	numUnambigConsensus	numUnambigNonConsensus	majorAltAllele	numMajorAltAllele	numA	numC	numD	numE	numF	numG	numH	numI	numK	numL	numM	numN	numP	numQ	numR	numS	numT	numV	numW	numY	num*	numX	num-	numOther
 	# HA_full:13:R	HA_full	13	R	R		151_78_S2.0.000	9922	9922	R	9887	35	G	23	0	0	0	0	0	23	0	0	3	0	1	0	0	0	9887	1	0	0	7	0	0	0	0	0
 	# HA_full:14:Q	HA_full	14	Q	Q		151_78_S2.0.000	9922	9922	Q	9903	19	R	9	0	0	0	1	0	0	0	0	1	1	0	0	0	9903	9	0	0	0	0	0	7	0	0	0
+
+	## ** Example input 2017-02-16 (additional columns)
+	# #name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus	Sample	coverageDepth	unambigCoverageDepth	unambigConsensus	numUnambigConsensus	numUnambigNonConsensus	majorAltAllele	numMajorAltAllele	cMAF	cMAF_95%_CI_low	cMAF_95%_CI_high	medianUnambigFreq	median95%ConfIntHigh	passThreshold	numA	numC	numG	numT	numN	numOther
+	# HA:427:C	HA	427	C	C		SV12.1	467	467	C	467	0		0	0.00000	0.00000	0.00787	0.00428	0.01538	no	0	467	0	0	0	0
+	# HA:428:A	HA	428	A	A		SV12.1	467	467	A	466	1	G	1	0.00214	0.00005	0.01187	0.00428	0.01538	no	466	0	1	0	0	0
+	# HA:469:A	HA	469	A	A		SV12.1	467	467	A	397	70	G	70	0.14989	0.11875	0.18555	0.00428	0.01538	yes	397	0	70	0	0	0
+
 
 	my @type = qw(nuc codon aa);
 	my @file_lists_by_type = ($nuc_files, $codon_files, $aa_files);
@@ -320,8 +331,8 @@ sub read_input_tally {
 
 				my @F = split(/\t/);
 				#	my ($pos,$ref_residue,$sample) = ($F[2],$F[3],$F[6]);
-				my ($pos,$ref_residue) = ($F[2],$F[3],"SV12_parental");
-				my $sample = $sample ? $sample : $F[6];		# If user specifies $sample, use that as the sample id for all reads.  Otherwise, use the 'Sample' column value.  
+				my ($pos,$ref_residue) = ($F[2],$F[3]);
+				my $sample = defined($sample) ? $sample : $F[6];		# If user specifies $sample, use that as the sample id for all reads.  Otherwise, use the 'Sample' column value.  
 
 				# Populate $cds for reference
 				if (exists($cds->{$type}->{$pos}) && $cds->{$type}->{$pos} ne $ref_residue){
@@ -330,7 +341,7 @@ sub read_input_tally {
 					$cds->{$type}->{$pos} 	= $ref_residue;
 				}
 
-				for (my $c = 14; $c < (scalar(@header) - 1); $c++){		 # i.e., start in column index 14, go all the way to the second to last column.  The last column is numOther, which we don't want to capture
+				for (my $c = 20; $c < (scalar(@header) - 1); $c++){		 # i.e., start in column index 20, go all the way to the second to last column.  The last column is numOther, which we don't want to capture
 					$sample_nuc_aa_codon_tally->{$sample}->{$type}->{$pos}->{$header[$c]} += $F[$c] if ($F[$c] > 0);
 				}
 			}
