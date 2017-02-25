@@ -22,8 +22,8 @@ Before running the commands, make sure that you have a version of Perl on your P
 * Array::Utils
 * File::Slurp
 * IO::Zlib
-* aomisc
-* primerid
+* aomisc (part of this repository)
+* primerid (part of this repository)
 
 To use the modules in the repository, modify your PERL5LIB to include the `primer-id-progs` directory, e.g.,
 ```
