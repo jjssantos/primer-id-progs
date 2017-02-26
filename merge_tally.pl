@@ -312,6 +312,8 @@ sub read_input_tally {
 		s/^num// for @header;
 		s/:.+// for @header;
 
+		my $max_coverage = 0;
+
 		foreach my $file (@$file_list){
 				print STDERR "reading file: $file\n" if $verbose;
 			my $wc = `cat $file | wc -l`;
@@ -330,6 +332,11 @@ sub read_input_tally {
 				next if (m/^#/);
 
 				my @F = split(/\t/);
+				my $coverage = $F[7];
+				$max_coverage = $coverage > $max_coverage ? $coverage : $max_coverage; 
+				next if ( ($coverage / $max_coverage) < 0.01 );		# Skip very low coverage rows
+
+
 				#	my ($pos,$ref_residue,$sample) = ($F[2],$F[3],$F[6]);
 				my ($pos,$ref_residue) = ($F[2],$F[3]);
 				my $sample = defined($sample) ? $sample : $F[6];		# If user specifies $sample, use that as the sample id for all reads.  Otherwise, use the 'Sample' column value.  
