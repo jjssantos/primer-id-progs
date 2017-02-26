@@ -273,6 +273,8 @@ OPTIONS:
 # Added base counts before and after merging primerid groups so we can do noise correction.
 # 2017-02-25
 # Fixed a bug in counting up total bases in input reads  
+# Add $ambig_summary_for_fasta_header_def to header for .cons.fasta output too, not just .ambig.fasta output.
+
 
 unless ($files||$ARGV[0]){	print STDERR "$usage\n";	exit;	}	#fasta and gff are required
 unless($files){	
@@ -750,8 +752,10 @@ sub make_consensus {
 	my @converted_base_counts;		# Array to store the number of converted bases in each read.  A "converted base" means the number of bases in a column in the alignment that differ from the consensus, assuming that the consensus is not an ambiguous character.  
 	my @ambiguous_base_counts;		# Array to store the number of bases that became an ambiguous nucleotide in the output due to lack of a majority consensus, or majority nucleotide fraction being below the --min_freq option.
 	my @total_base_counts; 			# Array to store the number of total bases in each read.  This can serve as the denominator.  
+	my @iupac_ambig_cons_counts;	# Array to store the number of bases that are IUPAC ambiguous characters other than N in consensus reads
+	my @n_ambig_cons_counts;		# Array to store the number of bases that are N in consensus reads
 
-	$pl->share(\@ambiguous, \@good, \@ambiguous_positions, \@min_freq_positions, \@converted_base_counts, \@ambiguous_base_counts, \@total_base_counts);
+	$pl->share(\@ambiguous, \@good, \@ambiguous_positions, \@min_freq_positions, \@converted_base_counts, \@ambiguous_base_counts, \@total_base_counts, \@iupac_ambig_cons_counts, \@n_ambig_cons_counts);
 	
 	$pl->while( sub {$count++; $primerID = $primerIDs[$count - 1]; },	sub {			# was $pl->foreach( \@primerIDs,	sub {	
 #		$primerID  = $_; 
@@ -832,6 +836,8 @@ sub make_consensus {
 		my $total_base_count = 0;	# Use to store the number of total bases seen in the alignment, to be saved to @total_base_counts after reviewing all columns in the alignment.  Don't include gap characters; only ACTGN
 		my $total_converted_base_count = 0;		# Use to store the number of total bases that differ from the consensus in columns passing min_freq.  To be saved to @converted_base_counts
 		my $total_ambig_base_count = 0;			# Use to store the number of total bases in columns where the no consensus is called due to not passing min_freq or no clear majority.  To be saved to @ambiguous_base_counts.
+		my $total_iupac_ambig_in_consensus = 0;	# Use to store the number of bases that are iupac characters (other than N) in the consensus read 
+		my $total_n_ambig_in_consensus = 0;		# Use this to store the number of bases that are N in the consensus read
 		my $res_num = 1;		# Residue number.  This is the position of the residue within the final consensus sequence.  
 		my @this_min_freq_positions;
 		for (my $pos = 1; $pos <= $len; $pos++){		# $pos is the position in the alignment.  It is usually the same as $res_num, residue number, except when there is an indel (-)
@@ -841,16 +847,18 @@ sub make_consensus {
 				my $res = $seq->subseq($pos, $pos);
 				$count{$res}++;
 			}
+			my $this_column_base_count = 0;
 			foreach my $res (keys %count) {
 #								if($verbose){		printf "Pos: %2d  Res: %s  Count: %2d\n", $pos, $res, $count{$res};		}
-				$total_base_count += $count{$res} if ($res =~ m/[ACTGN]/i);		# Count all real bases in the column.  Don't count gaps.
+				$this_column_base_count += $count{$res} if ($res =~ m/[ACTGN]/i);		# Count all real bases in the column.  Don't count gaps.
 			}		
+			$total_base_count += $this_column_base_count;		
 			my ($max_key_value) = find_key_with_biggest_value(\%count,2,1);	# returns arrayref of results, including ties
 #								if($verbose){	if (scalar(keys %count)>1){	my $top = find_key_with_biggest_value(\%count); printf "Pos: %2d  Res: %s  Count: %2d\n", $pos, $top, $count{$top};	}	}
 			my $res = ""; 
 			if (scalar(@$max_key_value) > 1){
 				# Then there is an ambiguous base because it couldn't be decided on a winner
-				$ambig_pos->{$res_num}=$max_key_value;		# Store the AoA of residue counts, to keep track of residue position
+				$ambig_pos->{$res_num}=$max_key_value;		# Store the AoA of residue counts, to keep track of residue position.  Could this be overwriting values if $res_num is the same for multiple columns? 
 				#$VAR1 = [
 				#          [
 				#            'T',
@@ -877,14 +885,16 @@ sub make_consensus {
 					if ($ambig_res =~ m/[N\.-]/i){	# ambiguities with Ns or gaps are assigned as "N" (?)
 									if ($debug){	print STDERR "An ambiguous base with N, '.' or '-'\tPos: $res_num\n";	}
 						$res = "N";
+						$total_n_ambig_in_consensus++;
 					}
 					else {
 						# Max residues do not include N.  Get IUPAC ambiguous base.  
 									if ($debug){	print STDERR "An ambiguous base with $ambig_res\tPos: $res_num\n";	}
-						$res = $iupac->{$ambig_res};				
+						$res = $iupac->{$ambig_res};
+						$total_iupac_ambig_in_consensus++;				
 					}
 	#				$ambig_summary_for_fasta_header_def .= " " . $res_num . uc($res);	# add the position and resulting ambiguous character to the fasta header.  Do below instead...
-					$total_ambig_base_count += $total_base_count;	# Assign all of the bases in this column ($total_base_count) to the $total_ambig_base_count
+					$total_ambig_base_count += $this_column_base_count;	# Assign all of the bases in this column ($total_base_count) to the $total_ambig_base_count
 				}
 			}
 			else {	
@@ -897,7 +907,8 @@ sub make_consensus {
 					# Then there was a clear majority, but the frequency didn't pass $min_freq.  Assign ambiguous
 					$res = "N"; 	# assign ambiguous.  Maybe this should be smarter, to assign ambiguity based on the bases that were seen...
 					push @this_min_freq_positions, $res_num;
-					$total_ambig_base_count += $total_base_count;	# Assign all of the bases in this column ($total_base_count) to the $total_ambig_base_count
+					$total_ambig_base_count += $this_column_base_count;	# Assign all of the bases in this column ($total_base_count) to the $total_ambig_base_count
+					$total_n_ambig_in_consensus++;
 				}
 				else {
 					# $res is clear majority, and also passing min_freq.
@@ -961,9 +972,10 @@ sub make_consensus {
 		# Deal with ambiguous positions/reads (if any)
 		my @ambig_pos = keys %$ambig_pos;
 
+		my $id = $primerID . $ambig_summary_for_fasta_header_def;
+		my @id_seq = ($id, $cons_seq);
 		if ($nongap_ambig_count <= $ambig){		
 			# Then report/save read
-			my @id_seq = ($primerID, $cons_seq);
 			push @good, \@id_seq; 		# Increment the good kept read count
 		}
 		else {
@@ -975,8 +987,6 @@ sub make_consensus {
 									print STDERR join " ", @ambig_pos, "\n";
 									print STDERR Dumper($ambig_pos); 
 								}
-			my $id = $primerID . $ambig_summary_for_fasta_header_def;
-			my @id_seq = ($id, $cons_seq);
 			push @ambiguous, \@id_seq; 	# Increment the ambiguous tossed read count
 		}
 		push @ambiguous_positions, @ambig_pos; 		# Add the whole array of ambiguous positions to the shared array of ambiguous positions
@@ -986,6 +996,8 @@ sub make_consensus {
 		push @total_base_counts, $total_base_count;
 		push @converted_base_counts, $total_converted_base_count;
 		push @ambiguous_base_counts, $total_ambig_base_count;
+		push @iupac_ambig_cons_counts, $total_iupac_ambig_in_consensus;
+		push @n_ambig_cons_counts, $total_n_ambig_in_consensus;
 				
 	}
 	); 	### End of Parallel Loop
@@ -1041,6 +1053,7 @@ sub make_consensus {
 			}
 			print STDERR "\n";
 		}
+		print STDERR "\n";
 	}
 	# Print out a table of ambiguous positions due to min_freq
 	if (@min_freq_positions){
@@ -1065,13 +1078,14 @@ sub make_consensus {
 	my $total_base_count = total(\@total_base_counts);
 	my $total_converted_base_count = total(\@converted_base_counts);
 	my $total_ambig_base_count = total(\@ambiguous_base_counts);
-	my $remaining_ambig_base_in_merged_reads = scalar(@ambiguous_positions) + scalar(@min_freq_positions);
-	print STDERR "\nTotal ambiguous bases in the merged reads:\t$remaining_ambig_base_in_merged_reads\n"; 
-	print STDERR "Total bases in the merged reads:\t$total_bases_in_merged_reads\n";
-	print STDERR "\n";
-	print STDERR "Total bases in input reads:\t$total_base_count\n";
+	my $remaining_iupac_ambig_base_in_merged = total(\@iupac_ambig_cons_counts);
+	my $remaining_n_ambig_base_in_merged = total(\@n_ambig_cons_counts);
+	my $remaining_ambig_base_in_merged_reads = $remaining_iupac_ambig_base_in_merged + $remaining_n_ambig_base_in_merged;			# Was: scalar(@ambiguous_positions) + scalar(@min_freq_positions);
+	print STDERR "\nTotal bases in input reads:\t$total_base_count\n";
 	print STDERR "Bases from input reads converted to consensus:\t$total_converted_base_count\n";
-	print STDERR "Bases from input reads converted to ambiguous:\t$total_ambig_base_count\n";
+	print STDERR "Bases from input reads converted to ambiguous:\t$total_ambig_base_count\n\n";
+	print STDERR "Total bases in the merged reads:\t$total_bases_in_merged_reads\n";
+	print STDERR "Total ambiguous bases in the merged reads:\t$remaining_ambig_base_in_merged_reads ($remaining_iupac_ambig_base_in_merged IUPAC non-N, $remaining_n_ambig_base_in_merged N)\n"; 
 
 	
 }
