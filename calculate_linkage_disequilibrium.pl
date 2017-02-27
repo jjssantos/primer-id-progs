@@ -20,11 +20,6 @@ use File::Basename;
 use File::Temp;
 use Statistics::R;
 use Parallel::Loops;
-#use Bio::Perl;
-#use Getopt::Std;
-#use PostData;
-#use Fasta_utils;
-#use feature ":5.10";	#allows say (same as print, but adds "\n"), given/when switch, etc.
 
 
 # Andrew J. Oler, PhD
@@ -40,9 +35,6 @@ use Parallel::Loops;
 #any later version) or the Artistic License 2.0.
 
 
-#my %options;	#Hash in which to store option arguments
-#use vars qw($opt_s $opt_f $opt_n $opt);
-#getopts ('s:f:n:bda:g:om:i:r:ecu:kh:j:l:ypx:',\%options);	
 
 #Print out the options
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
@@ -60,7 +52,20 @@ my $force;
 my $label = "Sample";
 my $group_id = "Group";
 my $table_only;
-GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'prefix=s' => \$prefix, 'nofilter' => \$nofilter, 'variant_threshold=s' => \$variant_threshold, 'cpu=s' => \$cpu, 'p=s' => \$cpu, 'force' => \$force, 'label=s' => \$label, 'labels=s' => \$label, 'group_id=s' => \$group_id, 'table_only' => \$table_only);
+GetOptions('save=s' => \$save, 
+	'output=s' => \$output, 
+	'verbose' => \$verbose, 
+	'files=s' => \$files, 
+	'gzip' => \$gzip, 
+	'prefix=s' => \$prefix, 
+	'nofilter' => \$nofilter, 
+	'variant_threshold=s' => \$variant_threshold, 
+	'cpu|p=s' => \$cpu, 
+	'force' => \$force, 
+	'label|labels=s' => \$label, 
+	'group_id=s' => \$group_id, 
+	'table_only' => \$table_only,
+	);
 
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
@@ -171,7 +176,7 @@ OPTIONS:
 # Compute quasi-cliques with DENSE.  (or Cocain?).  Add description of requirements (DENSE/mgqce) to usage.
 # Add fdr threshold option for quasi-clique variants. Default = 0.05
 # Add part to count the number of pairs with fdr <= 0.05 while printing.
-# Fix bug - not carrying over frequency from input variants.xls file.  
+# Redo time estimate after changes on 2017-02-26.
 
 # Change log
 # 2013-06-05 
@@ -217,6 +222,10 @@ OPTIONS:
 # Updated equation.  I couldn't quite remember what I used to fit the graph previously, but I used Excel this time, threshold of 0.004, which had 20 variants (187 codons).  Fit to equation Time_per_comparison = A + B * read_count + C * cpu.  Allow A, B, and C change.  Make column of values for "predicted_time_per_comparison" with that formula.  Then another column for diff^2 (Time_per_comparison-predicted_time_per_comparison)^2.  Make sum of the diff^2 column and set that to minimize.  For the test, I did p = 2 to 20 (by 2) and read_counts from 1000 to 9000 (by 1000) like last time.  
 	# Equation from niaid-1-11 test: Y = 0.54984528 + number_reads * 8.6017*10^-6 + p * 8.96667*10^-9
 	# Plotted results and found that optimal speed-up is found with -p 8-12.  
+# 2017-02-26
+# Updated linkage_disequilibrium sub to compute p-values outside of the Parallel Loop in order to avoid errors with checking version of R in Statistics::R
+# From To do: "Fix bug - not carrying over frequency from input variants.xls file."  I checked and it seems to be fine.
+
 
 unless ($ARGV[1]){	print STDERR "$usage\n";	exit;	}
 unless ($ARGV[2]){	print STDERR "No peptide file found.  Will only look at nucleotide and codon variants.\n";	}
@@ -647,25 +656,10 @@ sub linkage_disequilibrium {
 	my @stats; 	# AoA to save data.  Need to save it all first so I can then calculate the FDR from the p-values. 
 	
 	$pl->share(\@stats);  # Make the array shared between fork children
-#	$pl->share($reads);
 	 
 	foreach my $gene (keys %$this_variants_to_consider){
 		# Walk through each variant doing all pairwise comparisons 
-
-#		my $i = -1;		
-#		$pl->while( sub { $i++ < ( @{$this_variants->{$gene}}) }, sub {	# First variant
-#			for (my $j = $i+1; $j < @{$this_variants->{$gene}}; $j++){	# Second variant
 		my @variants = sort keys %{$this_variants_to_consider->{$gene}}; 
-#		my $comparisons = enumerate_comparisons(\@variants);	# Returns an AoA of all comparisons to perform (each sub-array has two values, each of format "position:consensus:variant").  
-							# print Dumper(\@variants); print Dumper($comparisons);
-				
-#		for (my $i = 0; $i < @{$this_variants->{$gene}}; $i++){	# First variant
-#			my $j = $i;
-#			$pl->while( sub { $j++ < ( @{$this_variants->{$gene}} - 1) }, sub {	# Second variant.  Compare first variant to all of these second variants in parallel.  I tried making the first loop parallel but that doesn't seem to speed it up at all in my quick tests, and the output is messier than this.  Maybe I could send one comparison to each thread, then we could use our x number of threads fully and be more efficient.  
-#				my ($first_pos,$first_cons,$first_var,$first_var_freq) 		= ($this_variants->{$gene}->[$i]->{'position'},$this_variants->{$gene}->[$i]->{'consensus'},$this_variants->{$gene}->[$i]->{'variant'},$this_variants->{$gene}->[$i]->{'frequency'});
-#				my ($second_pos,$second_cons,$second_var,$second_var_freq) 	= ($this_variants->{$gene}->[$j]->{'position'},$this_variants->{$gene}->[$j]->{'consensus'},$this_variants->{$gene}->[$j]->{'variant'},$this_variants->{$gene}->[$j]->{'frequency'});
-#							if ($verbose){	print "i: $i\t j: $j\n";	}
-#							if ($verbose){	print "first: $first_pos, $first_cons/$first_var ($first_var_freq)\tsecond: $second_pos, $second_cons/$second_var ($second_var_freq)\n";		}
 		my $count = 0;
 		my $comparison = "";	# initialize.  Single array of two elements.  	
 		$pl->while( sub {$count++; $comparison = $comparisons->{$type}->{$gene}->[$count - 1]; },	sub {			# was $pl->foreach( \@primerIDs,	sub {	
@@ -677,7 +671,6 @@ sub linkage_disequilibrium {
 			
 			$first_var_freq  = $this_variants->{$gene}->{$comparison->[0]}->{frequency} if (exists($this_variants->{$gene}->{$comparison->[0]}));
 			$second_var_freq = $this_variants->{$gene}->{$comparison->[1]}->{frequency} if (exists($this_variants->{$gene}->{$comparison->[1]}));
-			# *** I think this above is not capturing the frequency values for some reason... ***
 			
 			
 			next if ($first_pos == $second_pos);		# This shouldn't ever happen, but just in case.
@@ -733,26 +726,10 @@ sub linkage_disequilibrium {
 			}
 						# print "AB: $AB, Ab: $Ab, aB: $aB, ab: $ab\n"; 
 			
-			my ($p,$OR);
-			if ($table_only){
-				# Don't compute p-values
-				($p,$OR) = ("NA","NA");
-			}
-			else {
-				# Now get the p-value using Fisher's exact test in R
-				my $R = Statistics::R->new();		# http://search.cpan.org/~fangly/Statistics-R-0.31/lib/Statistics/R.pm
-				$R->set('x', [$AB,$Ab,$aB,$ab]);
-				$R->run(q`y = matrix(x,nrow=2)`);
-				$R->run(q`temp = fisher.test(y)`);
-				$R->run(q`p = temp$p.value`);
-				$R->run(q`or = temp$estimate`);
-				$OR = $R->get('or');
-				$p = $R->get('p');
-			}
-						# print "p-value: $p\tOddsRatio: $OR\n";
 			my $comparison_combined_name = join ":", $first_pos, $first_cons, $first_var, $second_pos, $second_cons, $second_var; 		# position:consensus:variant
 			#group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
-			my @array = ( $group_id, $label, $type, $gene, $comparison_combined_name, $first_pos, $first_cons, $first_var, $first_var_freq, $second_pos, $second_cons, $second_var, $second_var_freq, $AB, $Ab, $aB, $ab, $p, $OR );
+				# (p-value	OR	FDR) columns will be added outside of the parallel loop
+			my @array = ( $group_id, $label, $type, $gene, $comparison_combined_name, $first_pos, $first_cons, $first_var, $first_var_freq, $second_pos, $second_cons, $second_var, $second_var_freq, $AB, $Ab, $aB, $ab );
 			push @stats, \@array;
 
 			
@@ -763,16 +740,41 @@ sub linkage_disequilibrium {
 		});		# End of parallel loop
 	}	
 	
+
+	my $stats = \@stats;
+
+	# Compute p-values from contingency table counts
+	my $R = Statistics::R->new();		# http://search.cpan.org/~fangly/Statistics-R-0.34/lib/Statistics/R.pm
+	my ($p,$OR);
+	for (my $i = 0; $i < @$stats; $i++){
+		if ($table_only){
+			# Don't compute p-values
+			($p,$OR) = ("NA","NA");
+		}
+		else {
+			# Now get the p-value using Fisher's exact test in R	
+			my ($AB,$Ab,$aB,$ab) = @{$stats->[$i]}[-4..-1];
+			$R->set('x', [$AB,$Ab,$aB,$ab]);
+			$R->run(q`y = matrix(x,nrow=2)`);
+			$R->run(q`temp = fisher.test(y)`);
+			$R->run(q`p = temp$p.value`);
+			$R->run(q`or = temp$estimate`);
+			$OR = $R->get('or');
+			$p = $R->get('p');
+		}
+		push @{$stats->[$i]}, ($p,$OR);
+	}
+
+
+
 	# Now get the FDR-adjusted p-value using Benjamini & Hochberg method
 							# print Dumper($stats);
 	my @pvalues;
-	my $stats = \@stats;
 	foreach (@$stats){
 		push @pvalues, $_->[-2];
 	}
 							# print join " ", @pvalues; print "\n";
 	if (scalar(@pvalues)>1){
-		my $R = Statistics::R->new();
 		$R->set('x',\@pvalues);		
 		$R->run(q`y=p.adjust(x,method="BH",n=length(x))`);	# 	z$adj.p.value = p.adjust(z$p.value, method="BH",n = sum(!is.na(z$p.value)))
 		my $fdr_array = $R->get('y');
@@ -815,27 +817,6 @@ sub linkage_disequilibrium {
 #-----------------------------------------------------------------------------
 
 #-----------------------------------------------------------------------------
-sub read_and_write {
-	my $file = shift;
-	my $readfh = open_to_read($file);
-	my ($filename,$dir,$ext) = fileparse($file,@SUFFIXES);		# fileparse($file,qr/\.[^.]*/);
-#	my $newfilename = $save_dir.'/'.$filename.'__'.$variable.'.bed';
-#	my $writefh = open_to_write($newfilename, $gzip);
-	while (<$readfh>){
-		
-	}
-	
-#	close ($writefh);
-	close($readfh);
-}
-#-----------------------------------------------------------------------------
-#Useful things
 
-#my $total_lines = 0;
-#	$total_lines++;		#somewhere in subroutine, if I run through the file first.
-#	my $lines_done = 0;
-#	$lines_done++;		#in while loop, increment as each new line is processed
-#	if (($lines_done % 25) == 0){	#put this in the while loop too.
-#		print "Done processing $lines_done of $total_lines sequences.";
-#		&elapsed($start_time, ' Elapsed', $verbose);
-#	}
+#-----------------------------------------------------------------------------
+
