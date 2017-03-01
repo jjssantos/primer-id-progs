@@ -44,7 +44,7 @@ my $files;
 my $verbose;
 my $output;
 my $gzip;
-my $prefix = "Calculate_linkage";
+my $prefix;
 my $nofilter;
 my $variant_threshold = 0.001;
 my $cpu = 2;
@@ -148,9 +148,8 @@ calculate_linkage_disequilibrium.pl --group_id Immunized --label Sample1,Sample2
 OPTIONS:
 	--save		Directory in which to save files. Default = pwd.  If folder doesn't exist, 
 			it will be created.
-	--prefix	Prefix for output files.  Only applicable for single-sample analysis.  
-			Default = 'Calculate_linkage'.  (For multiple-file input, the value will be
-			'<--group_id value>.<label[i]>' )  
+	--prefix	Prefix for output files. '<--group_id value>.<label[i]>' will be added to
+			the prefix.
 	--variant_threshold	Minimum threshold to consider for a variant.  Default is 0.001.     
 	-p/--cpu	Number of CPUs to use for parallel processing.  Default = 2.  Speed-up is 
 			~0.5x per cpu.  E.g., for 8 cpu, I get ~4x speedup compared to using 1 cpu. 
@@ -225,7 +224,8 @@ OPTIONS:
 # 2017-02-26
 # Updated linkage_disequilibrium sub to compute p-values outside of the Parallel Loop in order to avoid errors with checking version of R in Statistics::R
 # From To do: "Fix bug - not carrying over frequency from input variants.xls file."  I checked and it seems to be fine.
-
+# 2017-02-28
+# Change prefix to be group.id even for single-sample, unless prefix is provided by user.
 
 unless ($ARGV[1]){	print STDERR "$usage\n";	exit;	}
 unless ($ARGV[2]){	print STDERR "No peptide file found.  Will only look at nucleotide and codon variants.\n";	}
@@ -277,8 +277,14 @@ for (my $i = 0; $i < @variants_files; $i++){
 
 	print STDERR "Processing file $variants_files[$i]...\n\t";
 	
-	$prefix = $group_id . "." . $labels[$i]	if ($num_var_files > 1); 
-	my $linkage_disequil	= $save_dir . "/" . $prefix . ".linkage.minfreq".$variant_threshold.".xls";			# was $prefix . "_linkage_disequilibrium_report_minfreq".$variant_threshold.".xls";
+	my $filebase;
+	if ($prefix){
+		$filebase = $prefix . "." . $group_id . "." . $labels[$i];				
+	}
+	else {
+		$filebase = $group_id . "." . $labels[$i];
+	}
+	my $linkage_disequil	= $save_dir . "/" . $filebase . ".linkage.minfreq".$variant_threshold.".xls";			# was $prefix . "_linkage_disequilibrium_report_minfreq".$variant_threshold.".xls";
 	$linkage_disequil =~ s/_linkage.linkage/_linkage/;
 	my $linkage_disequil_fh		= open_to_write("$linkage_disequil");
 	print $linkage_disequil_fh "#group\tsample\ttype\tgene\tcomparison\tpos1\tc1\tv1\tv1freq\tpos2\tc2\tv2\tv2freq\tc1c2\tc1v2\tv1c2\tv1v2\tp-value\tOR\tFDR\n";		
