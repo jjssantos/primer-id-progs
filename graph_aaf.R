@@ -8,7 +8,7 @@
 
 # graph_aaf.R <input>
 # Makes a scatterplot of alternate allele frequency by position
-# Takes output of add_consensus_columns_to_frequency_tables.pl or ( add_consensus_columns_to_frequency_tables.pl + merge_tally_overlapping_regions.pl ) 
+# Takes output of convert_reads_to_amino_acid.pl or merge_tally.pl or add_consensus_columns_to_frequency_tables.pl or ( add_consensus_columns_to_frequency_tables.pl + merge_tally_overlapping_regions.pl )
 args <- commandArgs(TRUE)
 pdfname <- sub("[.][^.]*$", ".pdf", args[1], perl=TRUE)
 #print(pdfname)
