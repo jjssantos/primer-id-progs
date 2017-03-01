@@ -48,7 +48,15 @@ my $gzip;
 my $label;
 my $debug;
 my $keeptmp;
-GetOptions('save=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'label=s' => \$label, 'debug' => \$debug, 'keeptmp' => \$keeptmp, );
+GetOptions('save=s' => \$save, 
+	'output=s' => \$output, 
+	'verbose' => \$verbose, 
+	'files=s' => \$files, 
+	'gzip' => \$gzip, 
+	'labels|label=s' => \$label, 
+	'debug' => \$debug, 
+	'keeptmp' => \$keeptmp, 
+);
 
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
@@ -67,24 +75,18 @@ Second argument is a frequency table or a comma-delimited list of frequency tabl
 replicates for Sample 2.
 
 Nucleotide input file has columns:
-#name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus	Sample	coverageDepth	numA	numC	numG	numT	numN	numOther
-Basically, there should be 7 columns before the coverageDepth column.
+#name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus	Sample	coverageDepth	unambigCoverageDepth	unambigConsensus	numUnambigConsensus	numUnambigNonConsensus	majorAltAllele	numMajorAltAllele	cMAF	cMAF_95%_CI_low	cMAF_95%_CI_high	medianUnambigFreq	median95%ConfIntHigh	passThreshold	numA	numC	numG	numT	numN	numOther
+Basically, there should be 6 columns before Sample, a coverageDepth column somewhere, and 20 columns before the first \"num\" column.
 
 Output file has columns
-name	chr	coordinate	refBase	Sample	coverageDepth	numA	numC	numG	numT	numN	del	SumACGT	numNonzeroACGT	Ref	Nonref
+name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus	Sample	coverageDepth	numA	numC	numG	numT	numN	del	SumACGT	numNonzeroACGT	Ref	Nonref
 One output file per sample
 Note, it only prints rows if the coverage is at least 1% of the maximum coverage for a sample.
 OPTIONS:
-	--label		Comma-delimited list of labels for the two samples or groups of samples.  
+	--labels		Comma-delimited list of labels for the two samples or groups of samples.  
 			Defaults to the Sample column if there is a single replicate per sample, or 
 			\"A,B\" if multiple replicates are used per sample.
 	--keeptmp	Keep temporary files.  Default is to delete them (e.g., R script, individual pdf files)
-
-	--nostats	Just make frequency table, don't run fisher's exact test.  Default is to do both.
-	--printall	Print all rows, even if lower than 1% coverage.  Default is to not print any rows with 
-			< 1% of the maximum coverage.
-	--stranded	Bases from reads aligning to forward strand will be tallied separately from bases of
-			reads aligning to the reverse strand.  Forces --nostats.  
 	--save		Directory in which to save files. Default = pwd.  If folder doesn't exist, it 
 			will be created.
 ";
@@ -96,6 +98,12 @@ OPTIONS:
 # Changed File::Temp::tempdir call to File::Temp::newdir to be compatible with File::Temp 0.23.  See http://www.dagolden.com/index.php/2109/why-the-latest-filetemp-might-surprise-you/
 # 2015-06-05
 # Fixed merge_samples to use the labels in case no replicates were provided.  The main issue is if both samples were run through convert_reads_to_amino_acid without supplying the --label option, both samples will have Sample_1 as Sample id, so no comparisons can be made in Fishers test. Fix that by substituting Sample_1 for label provided in --label.  
+# 2017-02-27
+# Modified to work with new output format for convert_reads_to_amino_acid.pl (and primerid.pm)
+# Do merge_replicates step for all files, even single file.  This step also subsets particular columns.
+# 2017-02-28
+# Modified filter.  To pass filter, must have adjP < 0.05, must change at least 2 fold, and at least one of the variants must be in the detectable range (above confidence threshold)
+# Fixed log2Ratio_cMAF to be sample 2 / sample 1 instead of vice versa.  
 
 # To do
 # When merging replicates, check for a change in the consensus based on the new frequencies and change the consensus accordingly.  
@@ -163,24 +171,24 @@ my $merged_sample1_file;
 my $merged_sample2_file;
 
 # Sample 1
-if ($ARGV[0] =~ m/,/){
+#if ($ARGV[0] =~ m/,/){
 	# Replicates to merge for first Sample
 	$merged_sample1_file = merge_replicates($ARGV[0], $labels[0]);
-}
-else {
-	# No replicates to merge.
-	$merged_sample1_file = $ARGV[0];
-}
+#}
+#else {
+#	# No replicates to merge.
+#	$merged_sample1_file = $ARGV[0];
+#}
 
 # Sample 2
-if ($ARGV[1] =~ m/,/){
+#if ($ARGV[1] =~ m/,/){
 	# Replicates to merge for first Sample
 	$merged_sample2_file = merge_replicates($ARGV[1], $labels[1]);
-}
-else {
-	# No replicates to merge.
-	$merged_sample2_file = $ARGV[1];
-}
+#}
+#else {
+#	# No replicates to merge.
+#	$merged_sample2_file = $ARGV[1];
+#}
 
 
 ## Now take the merged replicate files and make one merged file for the statistical analysis in R.
@@ -189,7 +197,7 @@ print STDERR "Merged file with both samples: $merged_both_samples\n";
 
 
 ## Now run the statistical analysis on the merged file
-run_fisher_test($merged_both_samples);
+run_fisher_test($merged_both_samples, \@labels);
 
 #foreach my $file (@files){
 #	read_and_write($file);
@@ -260,12 +268,16 @@ sub get_residue_type {
 #-----------------------------------------------------------------------------
 sub merge_replicates {
 	# Takes a comma-delimited list of frequency tables and merges the counts into a single
-	# file of the same format 
+	# file of the same format (except some columns are removed)
+	# If just a single file is provided, the output will be the same, except some of the columns are removed
 	my ($files,$label) = @_;
 	my @files = split(/,/, $files);
 	my $hash;	# hashref to store the counts as I'm adding them up from the different files.  First keys are the "Position" column from the frequency table (column 3).  Second level keys are 'info' (string of first 7 columns), 'coverageDepth' and all 'num' columns in the file.
 	my @header;			# All headers
-	my @data_headers;	# order of headers for data columns, including coverageDepth and all "num" columns.
+	my $h = column_header_lookup_hash($files[0]);	# Hashref where keys are headers and value is index within the array
+	my @data_headers;	# array of headers for data columns, including all "num" columns.
+	my @info_headers;	# array of info headers, including (name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus)
+	my @extra_headers = ( qw(coverageDepth unambigCoverageDepth numUnambigNonConsensus cMAF passThreshold) );	# Additional columns to get between the info columns and the data columns
 	
 	foreach my $file (@files){
 		my $readfh = open_to_read($file); 
@@ -281,6 +293,18 @@ sub merge_replicates {
 			
 			# Codon tally.xls file similar to amino acid tally.xls frequency file.  
 			
+			## 2017-02-27, update to format for convert_reads_to_amino_acid.pl output:
+			# Nucleotide tally.xls file:
+			# #name	gene	nucleotidePosition	refNucleotide	consensusNucleotide	refDiffConsensus	Sample	coverageDepth	unambigCoverageDepth	unambigConsensus	numUnambigConsensus	numUnambigNonConsensus	majorAltAllele	numMajorAltAllele	cMAF	cMAF_95%_CI_low	cMAF_95%_CI_high	medianUnambigFreq	median95%ConfIntHigh	passThreshold	numA	numC	numG	numT	numN	numOther
+			# HA:4:A	HA	4	A	A		71_S3	55675	55663	A	55663	0		0	0.00000	0.00000	0.00007	0.00006	0.00022	no	55663	0	0	0	12	0
+			# HA:5:A	HA	5	A	A		71_S3	55674	55659	A	55658	1	G	1	0.00002	0.00000	0.00010	0.00006	0.00022	no	55658	0	1	0	15	0
+
+			# Amino acid tally.xls file:
+			# #name	gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	refDiffConsensus	Sample	coverageDepth	unambigCoverageDepth	unambigConsensus	numUnambigConsensus	numUnambigNonConsensus	majorAltAllele	numMajorAltAllele	cMAF	cMAF_95%_CI_low	cMAF_95%_CI_high	medianUnambigFreq	median95%ConfIntHigh	passThreshold	numA	numC	numD	numE	numF	numG	numH	numI	numK	numL	numM	numnumP	numQ	numR	numS	numT	numV	numW	numY	num*	numX	num-	numOther
+			# HA:2:K	HA	2	K	K		71_S3	55675	55645	K	55644	1	R	1	0.00002	0.00000	0.00010	0.00014	0.00035	no	0	0	0	0	0	0	0	0	55644	0	30	0	0
+			# HA:3:A	HA	3	A	A		71_S3	55675	55667	A	55658	9	T	5	0.00016	0.00007	0.00031	0.00014	0.00035	no	55658	0	0	1	0	1	0	0	0	0	0
+
+
 			# Basically, the first few columns are the same for all types and these columns can be used as a key to the hash.  
 			# The column "coverageDepth" and all columns starting with "num" should be saved for adding up between the different files.
 			# I can think of one potential problem in adding these up where the consensus might not be the same among all replicates, so the key will not work.  Maybe I'll just use the reference base as the key.  I should calculate a new consensus if the tally says it has changed in the merged situation... for now, I'm not going to do that because the likelihood is very low.
@@ -289,7 +313,8 @@ sub merge_replicates {
 			my @F = split(/\t/); 	# Split by tabs, not whitespace because sometimes (most of the time) the refDiffConsensus column is empty
 			if (m/^#/){
 				@header = @F unless @header; 	# Just save from first file	
-				@data_headers = @F[7..$#F] unless @data_headers;	# Just save from first file	
+				@info_headers = @F[0..5] unless @info_headers;
+				@data_headers = @F[20..$#F] unless @data_headers;	# Just save from first file	
 				next;
 			}
 			my $pos = $F[2]; 
@@ -297,7 +322,18 @@ sub merge_replicates {
 			
 			$hash->{$pos}->{info} = $info_columns unless (exists($hash->{$pos}->{info}));  	# Only store it if it isn't there yet, thus giving preference to first file in the list.
 			
-			for (my $i = 7; $i < @F; $i++){
+			for my $col (@extra_headers){
+				if (exists($h->{$col})){
+					if($F[$h->{$col}] =~ /\d+/){
+						$hash->{$pos}->{$col} += $F[$h->{$col}];	# Increment coverageDepth, other extra columns before the num* (data) columns
+					}
+					else {
+						$hash->{$pos}->{$col} .= "," . $F[$h->{$col}];
+						$hash->{$pos}->{$col} =~ s/^,//;
+					}
+				}
+			}	
+			for (my $i = 20; $i < @F; $i++){
 				my $col = $header[$i]; 
 				if ($F[$i] =~ m/^\d+$/){
 					$hash->{$pos}->{$col} += $F[$i]; 	# Add the value to the current value in the hash. Only add if an integer (skip the entries in numOther such as this: "1(-:1)")
@@ -315,19 +351,19 @@ sub merge_replicates {
 	}
 	
 	
-#	print Dumper($hash); exit;
+	#	print Dumper($hash); exit;
 
 	# Prepare output file for merged 
 	my $merged_file = $tempdir . "/$label".".mergedreps.tally.xls";
 	my $writefh = open_to_write($merged_file);
 	$header[0] =~ s/^#//;	# R doesn't like column headers to begin with #
-	print $writefh join "\t", @header; 
+	print $writefh join "\t", @info_headers, "Sample", @extra_headers, @data_headers; 
 	print $writefh "\n";
 	
 	foreach my $pos (sort {$a <=> $b} keys %$hash){
 		my $info = $hash->{$pos}->{info};
 		print $writefh $info;
-		foreach my $col (@data_headers){
+		foreach my $col (@extra_headers, @data_headers){
 			if (exists($hash->{$pos}->{$col})){
 				print $writefh "\t".$hash->{$pos}->{$col};
 			}
@@ -354,8 +390,8 @@ sub merge_samples {
 	# Or, we could compute these extra columns up above.
 	my ($file1, $file2, $label1, $label2) = @_;
 	
-	my $labels_for_filename = join "_", $label1, $label2;
-	my $merged_filename = $save_dir . "/Merged_" . $labels_for_filename . ".tally.xls";
+	my $labels_for_filename = join ".", $label1, $label2;
+	my $merged_filename = $save_dir . "/Merged." . $labels_for_filename . ".tally.xls";
 	
 	# Initialize output file and print out header
 	my $merged_file_fh = open_to_write($merged_filename);
@@ -387,7 +423,9 @@ sub merge_samples {
 }
 #-----------------------------------------------------------------------------
 sub run_fisher_test {
-	my $merged_file = shift;
+	my ($merged_file,$labels) = @_;
+	
+	my @labels = @$labels;
 	
 	# Now write an R script to run the statistical analysis
 	# Input file format (column headers):
@@ -401,14 +439,16 @@ sub run_fisher_test {
 		die; 
 	}
 
+	my @header = get_header($merged_file);
+
 	# Write the R script, then run it.  
 	my $temp_script = $tempdir."/temp_script.R";
 	
 	my $scriptfh = open_to_write($temp_script, 0, 0, 1);
 
-	my $labels_for_filename = join "_", @labels;
-	my $all_output_file  = $save_dir.'/'.$labels_for_filename.".$type.freq.pvalue.all.xls";
-	my $filt_output_file = $save_dir.'/'.$labels_for_filename.".$type.freq.pvalue.filt.xls";
+	my $labels_for_filename = join ".", @labels;
+	my $all_output_file  = $save_dir.'/'.$labels_for_filename.".$type.compare.pvalue.all.xls";
+	my $filt_output_file = $save_dir.'/'.$labels_for_filename.".$type.compare.pvalue.filt.xls";
 
 	# Need to allow user to control "min" value below
 	
@@ -450,6 +490,7 @@ fisherbyresidue <- function(d, min=50){
 '."\n";
 
 	print $scriptfh "data = read.delim(\"$merged_file\",fill=TRUE,header=TRUE,sep=\"\\t\",stringsAsFactors=FALSE)\n";
+	print $scriptfh "data\$Sample <- factor(data\$Sample, levels = c(\"$labels[0]\", \"$labels[1]\"))\n";		# Set the order of the output to be the same order specified by the user. 
 	print $scriptfh "print(\"Sample table:\")\n";
 	print $scriptfh "print(table(data\$Sample))\n";
 	print $scriptfh "nsamples <- nrow(table(data\$Sample))\n";
@@ -461,14 +502,14 @@ fisherbyresidue <- function(d, min=50){
 	print $scriptfh 'y=unlist(lapply(data.list,fisherbyresidue))'."\n";
 	print $scriptfh 'data.sample.list = split(data,data$Sample)'."\n";
 	
-	my $out_col_names = join "\",\"", @header[0..7]; # qw(name gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	refDiffConsensus	Sample	coverageDepth);
+	my $out_col_names = join "\",\"", @header[0..11]; # qw(name gene	aminoAcidPosition	refAminoAcid	consensusAminoAcid	refDiffConsensus	Sample	coverageDepth);
 	$out_col_names = "\"" . $out_col_names . "\""; 
 	$out_col_names = $out_col_names . "," . $col_names;
 	# Need to maybe add more columns here...
 #	print "colnames:\n$out_col_names\n"; exit;
 	print $scriptfh "out.col.names = c($out_col_names)\n";
 	
-	print $scriptfh 'z=merge(data.sample.list[[1]],data.sample.list[[2]][,out.col.names],by=c(1,2,3),sort=FALSE)'."\n";
+	print $scriptfh 'z=merge(data.sample.list[[1]][,out.col.names],data.sample.list[[2]][,out.col.names],by=c(1,2,3),sort=FALSE)'."\n";
 	if (scalar (@labels) > 2){
 		print $scriptfh 'z=merge(z,data.sample.list[[3]][,out.col.names],by=c(1,2,3),sort=FALSE)'."\n";
 	}
@@ -479,13 +520,18 @@ fisherbyresidue <- function(d, min=50){
 	print $scriptfh 'z=merge(z,cbind(names(y),p.value=y),by.x=1,by.y=1, sort=FALSE)'."\n";
 	print $scriptfh 'z$p.value = as.numeric(as.vector(z$p.value))'."\n";
 	print $scriptfh 'z$adj.p.value = p.adjust(z$p.value, method="BH",n = sum(!is.na(z$p.value)))'."\n";
-	print $scriptfh 'table(z$adj.p.value < 0.05)'."\n"; 	# Not necessary
-	print $scriptfh 'filt = z[z$adj.p.value < 0.05 & !is.na(z$adj.p.value),]'."\n";
-	print $scriptfh "write.table(filt, file = \"$filt_output_file\", sep=\"\\t\", quote= FALSE, row.names = FALSE)\n";
+	print $scriptfh 'z$log2ratio_cMAF = log( (z$numUnambigNonConsensus.y / z$unambigCoverageDepth.y) / (z$numUnambigNonConsensus.x / z$unambigCoverageDepth.x), base=2)'."\n";	 
 	print $scriptfh "write.table(z, file = \"$all_output_file\", sep=\"\\t\", quote= FALSE, row.names = FALSE)\n";
+	print $scriptfh 'table(z$adj.p.value < 0.05)'."\n"; 	# Not necessary
+	print $scriptfh 'z$passThreshold = paste(z$passThreshold.x,z$passThreshold.y, sep=";")'."\n";	# Join the columns together so I can do a grep on the values of both columns
+	print $scriptfh 'filt = z[z$adj.p.value < 0.05 & !is.na(z$adj.p.value) & (z$log2ratio_cMAF < -1 | z$log2ratio_cMAF > 1),]'."\n";		# To pass filter, must have adjP < 0.05, must change at least 2 fold, and at least one of the variants must be in the detectable range (above confidence threshold)
+	print $scriptfh 'filt = subset(filt, grepl("yes", filt$passThreshold))'."\n";	# either variant passed threshold, in any replicate
+	print $scriptfh 'filt$passThreshold <- NULL'."\n";		# Delete this extra column
+	print $scriptfh 'nrow(filt)'."\n";
+	print $scriptfh "write.table(filt, file = \"$filt_output_file\", sep=\"\\t\", quote= FALSE, row.names = FALSE)\n";
 
 	#Make some graphs
-#	print $scriptfh 'matplot(z$p.value,z$adj.p.value)'."\n";	# Not necessary
+	#	print $scriptfh 'matplot(z$p.value,z$adj.p.value)'."\n";	# Not necessary
 	print $scriptfh 'filt$transf.p.value = -10 * log(filt$adj.p.value, base=10)'."\n";
 	print $scriptfh "positions = filt[,c(\"$header[1]\", \"$header[2]\", \"transf.p.value\")]\n";
 	print $scriptfh 'pos.list = split(positions,positions[,1])'."\n";
