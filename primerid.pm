@@ -242,7 +242,7 @@ sub print_reports {
 			my ($unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele) = get_unambig_values($nuc_aa_codon_tally, $type, $pos, $converter, $verbose);
 			my ($cMAF,$low,$high,$pass_threshold) = ("","","","no");
 			if ($unambig_coverage > 0){
-				$cMAF = sprintf("%.5f", $num_unambig_nonconsensus / $unambig_coverage);		# Assign cumulative Minor Allele Frequency (if there are some unambiguous residues)
+				$cMAF = sprintf("%.7f", $num_unambig_nonconsensus / $unambig_coverage);		# Assign cumulative Minor Allele Frequency (if there are some unambiguous residues)
 				($low,$high) = get_confidence_interval($R, $num_unambig_nonconsensus, $unambig_coverage);
 				$pass_threshold = "yes" if ($low > $median_high_conf_int);
 			} 
@@ -618,7 +618,7 @@ sub print_variants {
 				$variant_filter = "PASS" unless ($variant_filter);		# After all filters checked.
 				my $count = $nuc_aa_codon_tally->{$type}->{$pos}->{$variant};
 				if ($count >= $threshold_count){
-					my $frequency = sprintf("%.5f",  $nuc_aa_codon_tally->{$type}->{$pos}->{$variant} / $coverage);
+					my $frequency = sprintf("%.7f",  $nuc_aa_codon_tally->{$type}->{$pos}->{$variant} / $coverage);
 					my ($min,$max) = get_confidence_interval($R, $count,$coverage);
 					print $variants_fh join "\t", $type, $gene, $pos, $consensus, $variant, $count, $coverage, $frequency, $variant_filter, $min, $max;
 					print $variants_fh "\n";
@@ -642,15 +642,14 @@ sub get_confidence_interval {
 
 	my ($R, $count, $coverage) = @_;
 
-
 #	my $R = Statistics::R->new();		# http://search.cpan.org/~fangly/Statistics-R-0.31/lib/Statistics/R.pm
 	$R->set('x', $count);
 	$R->set('n', $coverage);
 	$R->run(q`t = binom.test(as.integer(x), as.integer(n))`);
 	$R->run(q`min = min(t$conf.int)`);
 	$R->run(q`max = max(t$conf.int)`);
-	my $min = sprintf("%.5f", $R->get('min') );
-	my $max = sprintf("%.5f", $R->get('max') );
+	my $min = sprintf("%.7f", $R->get('min') );
+	my $max = sprintf("%.7f", $R->get('max') );
 
 	return ($min,$max);
 }
@@ -669,7 +668,7 @@ sub get_median_unambig_freq {
 	foreach my $pos (sort {$a <=> $b} keys %{$nuc_aa_codon_tally->{$type}}){
 		my ($unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele) = get_unambig_values($nuc_aa_codon_tally, $type, $pos, $converter, $verbose);
 		if ($unambig_coverage > 0){
-			push @unambig_freq, sprintf("%.5f", $num_unambig_nonconsensus / $unambig_coverage );
+			push @unambig_freq, sprintf("%.7f", $num_unambig_nonconsensus / $unambig_coverage );
 			my ($low,$high) = get_confidence_interval($R, $num_unambig_nonconsensus, $unambig_coverage);
 			push @unambig_freq_high_conf_int, $high;
 		}
