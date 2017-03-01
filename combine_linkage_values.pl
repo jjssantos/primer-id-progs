@@ -19,7 +19,7 @@ use Data::Dumper;
 use File::Basename;
 use File::Temp;
 use File::Spec;
-#use Statistics::R;
+use Statistics::R;
 #use Bio::Perl;
 #use Getopt::Std;
 #use PostData;
@@ -60,9 +60,26 @@ my $quasi;
 my $keeptmp;
 my $method = 'fisher';
 my $prefix = "Linkage_plot";
-GetOptions('save|s=s' => \$save, 'output=s' => \$output, 'verbose' => \$verbose, 'files=s' => \$files, 'gzip' => \$gzip, 'mu=s' => \$mu, 'gamma=s' => \$gamma, 'FDR|F=s' => \$FDR, 'quasi|q' => \$quasi, 'var|v=s' => \$var, 'keeptmp' => \$keeptmp, 'method|m=s' => \$method, 'prefix=s' => \$prefix);
+my $sample = "";
+my $Rscript_loc = 'Rscript';
+GetOptions('save|s=s' => \$save, 
+	'output=s' => \$output, 
+	'verbose' => \$verbose, 
+	'files=s' => \$files, 
+	'gzip' => \$gzip, 
+	'mu=s' => \$mu, 
+	'gamma=s' => \$gamma, 
+	'FDR|F=s' => \$FDR, 
+	'quasi|q' => \$quasi, 
+	'var|v=s' => \$var, 
+	'keeptmp' => \$keeptmp, 
+	'method|m=s' => \$method, 
+	'prefix=s' => \$prefix,
+	'sample=s' => \$sample,
+	'Rscript=s' => \$Rscript_loc,
+);
 
-my $Rscript_loc = '/usr/local/bio_apps/R-3.1.0/bin/Rscript';
+
 #-----------------------------------------------------------------------------
 #----------------------------------- MAIN ------------------------------------
 #-----------------------------------------------------------------------------
@@ -71,7 +88,8 @@ my $exe = basename($0);
 
 my $usage = "$exe <variants_linkage_file_1> [ <variants_linkage_file_2> ... ]
 variants_linkage files are the output of calculate_linkage_disequilibrium.  Each input file
-is a separate replicate.  Single replicate is fine too.  
+is a separate replicate.  Single replicate is fine too. Each file should have a separate 
+sample id in the 'sample' column.
 $exe takes variants linkage file from calculate_linkage_disequilibrium.pl and plots them in R.
 Requires R on the path and requires the 'network' library to be installed in R.
 
@@ -101,13 +119,17 @@ Group1	Sample1	aa	Seq12_093009_HA_cds	157:K:E:238:G:D	157	K	E	0.00122	238	G	D	0.
 
 OPTIONS:
 	-F/--FDR	FDR threshold for inclusion of variants in the analysis.  Default = 0.05.
-	-v/--var	Type of variant(s) to consider, comma-delimited list.  Possible values: 
+	-v/--var	Type of variant(s) to consider (for plot), comma-delimited list.  Possible values: 
 			aa codon nuc.  Default is \"aa,codon,nuc\" (i.e., all variants).
 	-m/--method	Method to use for merging linkage values if multiple files are provided.
 			Possible values are 'fisher' and 'counts'.  'fisher' will use Fisher's method
 			to combine the p-values.  'counts' will combine the counts and recompute a 
 			p-value and fdr.  Default is 'fisher'.  
-	--prefix	Prefix for the output files.  Default = 'Linkage_plot'.
+	--prefix	Prefix for the output files.  Default = 'Linkage_plot'.  Output merged file
+			will be <prefix>[.merged.xls]
+	--sample 	Sample name for the output file.  Default is a concatenation of the sample
+			ids from the files. Note that each replicate file should have a separate sample id!
+	--Rscript 	Location of Rscript.  Default is 'Rscript' (expected on path.)
 	--keeptmp	Keep temporary files
 	-q/--quasi	Calculate quasi-cliques in network using mgqce.  Default is just to make
 			a network plot.  Requires mgqce on the PATH.
@@ -121,7 +143,7 @@ OPTIONS:
 # Maybe add filter for only nonsyn codons?
 # Work on optimizing the circle sizes and edge thickness...  see /Users/oleraj/Dropbox/NIAID_Data/WInce/NIH_Research_Festival_Poster/Some_analysis_for_figures/linkage for examples of where it is needed!
 # Clean up a little (subroutine names, etc.)
-# Merge the input files and output a merged output file!
+
 
 # Change log
 # 2014-04-17
@@ -138,6 +160,8 @@ OPTIONS:
 # Modified expected input file format to match output of calculate_linkage_disequilibrium.pl
 # 2015-04-16
 # Fixed a bug where $save is passed to File::Spec even if it doesn't exist.  Made default for $save to be Cwd::cwd().
+# 2017-02-27
+# Merge the input files and output a merged output file!  Also compute fishers test on the combined p-values.  
 
 unless($ARGV[0]){
 	print STDERR $usage;
@@ -159,7 +183,7 @@ foreach my $type (@types){
 
 # Set up global temporary directory
 my $tempdir;
-my $template = "comb_link_value_tempXXXXX";
+my $template = "$save_dir/comb_link_value_tempXXXXX";
 if ($keeptmp){
 	$tempdir = File::Temp->newdir( $template, DIR => $save_dir, CLEANUP => 0 );		# CLEANUP => 0 so it will not be deleted 
 }
@@ -170,21 +194,18 @@ else {
 # Merge files if multiple files are provided
 my $merged_file;
 if (@ARGV > 1){
-	$merged_file = merge_files(\@ARGV, $method);	# Merge linkage values based on designated method. 
+	$sample = get_sample(\@ARGV) unless $sample;
+	$merged_file = merge_files(\@ARGV, $method, $sample, $prefix, $save_dir);	# Merge linkage values based on designated method. 
 }
 else {
 	$merged_file = $ARGV[0];
 }
 
 
-foreach my $file (@ARGV){
-#	my ($filename,$dir,$ext) = fileparse($file,@suffixes);		# fileparse($file,qr/\.[^.]*/);
-#	my $newfilename = $save_dir.'/'.$filename.'__'.$variable.'.bed';
 
-	my $stats = read_variants($file);
-	calculate_quasi_cliques($stats);
+my $stats = read_variants($merged_file);
+calculate_quasi_cliques($stats);
 	
-}
 
 
 
@@ -194,14 +215,171 @@ foreach my $file (@ARGV){
 #---------------------------------- SUBS -------------------------------------
 #-----------------------------------------------------------------------------
 sub merge_files {
-	my ($files,$method) = @_;
+	my ($files,$method,$merged_sample_id,$prefix, $save_dir) = @_;
 	my @files = @$files;
-	my $merged_filename;		# Name for merged file.  
+	my $merged_filename = "$save_dir/$prefix" . ".mergedLinkage.xls";		# Name for merged file.  
 	
+	#	#group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
+	#	SV12_P3	70_S3.1	aa	HA	149:T:S:157:K:E	149	T	S	0.01264	157	K	E	0.06848	43460	3241	598	0	4.636715e-19	0	2.384596e-18
+	#	SV12_P3	70_S3.1	aa	HA	149:T:S:238:G:D	149	T	S	0.01264	238	G	D	0.09135	40903	4326	591	0	5.387773e-26	0	3.232664e-25
+	#	SV12_P3	70_S3.1	aa	HA	157:K:E:158:N:D	157	K	E	0.06848	158	N	D	0.00627	43740	297	3242	0	1.081045e-09	0	3.537965e-09
+	#	SV12_P3	70_S3.1	aa	HA	157:K:E:187:K:E	157	K	E	0.06848	187	K	E	0.00186	43973	55	3206	33	1.309592e-16	8.227921	5.893164e-16
+
+	# How to merge the files?
+	# Merge the counts for c1c2, c1v2, v1c2, v1v2 for each comparison.
+	# Compute new v1freq and v2freq (e.g., v1freq = (v1c2 + v1v2) / (c1c2 + c1v2) = (598 + 0) / (43460 + 3241) = 598 / 46701 = 0.012804)
+		# Actually, that doesn't include all of the residues at this position.  I would really need to include all variants at a particular position in the denominator (v1c2 and v1v2 columns for all v1 variants to compute v1freq...)
+		# "c" won't change for a particular file, but "v" will.
+		# Across different files though, "c" might be different for a particular position.
+		# Perhaps the easiest would be to tally up the counts for each residue at each position across all files, then use that to determine the new consensus and compute the vfreq for each variant.
+	
+	# Read the files and store all information from all files to a data structure. ($data)
+		# keys (constant): group, type, gene
+			# comparisons -> tally c1c2, etc. for each "comparison" (also, don't need to save pos1, c1, v1, pos2, c2, v2 because that comes from "comparison")
+			# counts -> tally residue counts for each pos 
+			# freq -> frequencies for each residue in counts (compute afterwards)
+	my $data; 	# See above for description of format
+
+	# Walk through each file and save the data
+	foreach my $file (@files){
+		my $readfh = open_to_read($file);
+		while(<$readfh>){
+			chomp;
+			# #group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
+			# WT_P3	64_S1.2	nuc	HA	897:G:T:930:T:C	897	G	T	0.00040	930	T	C	0.00011	56784	6	23	0	1	0	1
+
+			next if (m/^#/);
+
+			my ($group, $sample, $type, $gene, $comparison, $pos1, $c1, $v1, $v1freq, $pos2, $c2, $v2, $v2freq, $c1c2, $c1v2, $v1c2, $v1v2, $pvalue, $OR, $FDR) = split(/\t/);
+			# Save comparison counts
+			$data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{c1c2} += $c1c2;
+			$data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{c1v2} += $c1v2;
+			$data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{v1c2} += $v1c2;
+			$data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{v1v2} += $v1v2;
+			# Save pvalues (actually FDR)
+			warn "overwriting FDR value for $group $type $gene $sample ! Something is not unique between these files!\n" if exists($data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{$sample});
+			$data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{$sample} = $FDR;		# Should this be $FDR or $pvalue?
+			# Save allele counts.  Save once for each residue in each sample, then add across samples
+			$data->{$group}->{$type}->{$gene}->{counts}->{$pos1}->{$c1}->{$sample} = $c1c2 + $c1v2 unless (exists($data->{$group}->{$type}->{$gene}->{counts}->{$pos1}->{$c1}->{$sample}));
+			$data->{$group}->{$type}->{$gene}->{counts}->{$pos2}->{$c2}->{$sample} = $c1c2 + $v1c2 unless (exists($data->{$group}->{$type}->{$gene}->{counts}->{$pos2}->{$c2}->{$sample}));
+			$data->{$group}->{$type}->{$gene}->{counts}->{$pos1}->{$v1}->{$sample} = $v1c2 + $v1v2 unless (exists($data->{$group}->{$type}->{$gene}->{counts}->{$pos1}->{$v1}->{$sample}));
+			$data->{$group}->{$type}->{$gene}->{counts}->{$pos2}->{$v2}->{$sample} = $c1v2 + $v1v2 unless (exists($data->{$group}->{$type}->{$gene}->{counts}->{$pos2}->{$v2}->{$sample}));
+
+		}
+		close($readfh);
+	}
+
+	my $R = Statistics::R->new();	
+
+	# Now tally up counts across samples, compute p-values
+
+	my $writefh = open_to_write($merged_filename);
+	print $writefh "#";
+	print $writefh join "\t", ( qw(group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	pvalues OR	fisherFDR) );
+	print $writefh "\n";
+
+	foreach my $group (sort keys %$data){
+		TYPE:foreach my $type (sort keys %{$data->{$group}}){
+			next TYPE unless (exists($types->{$type}));
+			foreach my $gene (sort keys %{$data->{$group}->{$type}}){
+				# Tally up counts and compute frequency
+				foreach my $pos (%{$data->{$group}->{$type}->{$gene}->{counts}}){
+					my $pos_total = 0;
+					foreach my $residue (keys %{$data->{$group}->{$type}->{$gene}->{counts}->{$pos}}){
+						my $residue_total_count = total(values %{$data->{$group}->{$type}->{$gene}->{counts}->{$pos}->{$residue}});  # Count up all of the counts from all samples.  this assumes that each file has a separate sample id...
+						$data->{$group}->{$type}->{$gene}->{counts}->{$pos}->{$residue}->{allsample} = $residue_total_count;
+						$pos_total += $residue_total_count;
+					}
+					foreach my $residue (keys %{$data->{$group}->{$type}->{$gene}->{counts}->{$pos}}){
+						my $freq = $data->{$group}->{$type}->{$gene}->{counts}->{$pos}->{$residue}->{allsample} / $pos_total;
+						$data->{$group}->{$type}->{$gene}->{freq}->{$pos}->{$residue}->{allsample} = sprintf("%.7f", $freq);
+					}
+				}
+				# Compute new p-values for each comparison
+				foreach my $comparison (sort keys %{$data->{$group}->{$type}->{$gene}->{comparisons}}){
+				#	if ($method =~ m/fisher/i){
+						# fishersMethod = function(x) pchisq(-2 * sum(log(x)),df=2*length(x),lower=FALSE)
+						my @pvalues = values %{$data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}};		# *** Double-check that this is grabbing the right p-values
+							# print Dumper(\@pvalues);
+						$R->set('x', [@pvalues]);
+						$R->run(q`f = pchisq(-2 * sum(log(x)),df=2*length(x),lower=FALSE)`);
+						my $f = $R->get('f');
+						$data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{allsamplefisher} = $f;	
+						$data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{pvaluelist} = 	join ",", @pvalues;
+				#	}
+				#	elsif($method =~ m/count/i){
+						# Nothing at the moment
+						my $AB = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{c1c2};
+						my $Ab = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{c1v2};
+						my $aB = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{v1c2};
+						my $ab = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{v1v2};
+						$R->set('x', [$AB,$Ab,$aB,$ab]);
+						$R->run(q`y = matrix(x,nrow=2)`);
+						$R->run(q`temp = fisher.test(y)`);
+						$R->run(q`p = temp$p.value`);
+						$R->run(q`or = temp$estimate`);
+						my $OR = $R->get('or');
+						my $p = $R->get('p');
+						$data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{allsamplepvalue} = $p;
+						$data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{allsampleOR} = $OR;
+				#	}
+				}
+				#	print Dumper($data->{$group}->{$type}->{$gene}->{pvalue});
+
+				# To do: compute adjusted p-value for method 'count'
+
+				# Now print out the data
+				foreach my $comparison (sort keys %{$data->{$group}->{$type}->{$gene}->{comparisons}}){
+					# 897:G:T:930:T:C
+					my ($pos1, $c1, $v1, $pos2, $c2, $v2) = split(/:/, $comparison);
+					my $v1freq = $data->{$group}->{$type}->{$gene}->{freq}->{$pos1}->{$v1}->{allsample};
+					my $v2freq = $data->{$group}->{$type}->{$gene}->{freq}->{$pos2}->{$v2}->{allsample};
+					my $c1c2 = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{c1c2};
+					my $c1v2 = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{c1v2};
+					my $v1c2 = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{v1c2};
+					my $v1v2 = $data->{$group}->{$type}->{$gene}->{comparisons}->{$comparison}->{v1v2};
+					my $fisher = $data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{allsamplefisher};
+					my $OR = $data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{allsampleOR};
+					my $pvalues = $data->{$group}->{$type}->{$gene}->{pvalue}->{$comparison}->{pvaluelist};
+					print $writefh join "\t", $group, $merged_sample_id, $type, $gene, $comparison, $pos1, $c1, $v1, $v1freq, $pos2, $c2, $v2, $v2freq, $c1c2, $c1v2, $v1c2, $v1v2, $pvalues, $OR, $fisher;
+					print $writefh "\n";
+				}
+			}
+		}
+	}
+
+	close($writefh);
+
 	
 	
 	return $merged_filename;
 }
+#-----------------------------------------------------------------------------
+sub get_sample {
+	my $files = shift;
+	my @files = @$files;
+
+	my %samples;	# hash to store all sample ids seen in the files
+
+	# Walk through each file and save the sample ids
+	foreach my $file (@files){
+		my $readfh = open_to_read($file);
+		while(<$readfh>){
+			chomp;
+			# #group	sample	type	gene	comparison	pos1	c1	v1	v1freq	pos2	c2	v2	v2freq	c1c2	c1v2	v1c2	v1v2	p-value	OR	FDR
+			# WT_P3	64_S1.2	nuc	HA	897:G:T:930:T:C	897	G	T	0.00040	930	T	C	0.00011	56784	6	23	0	1	0	1
+
+			next if (m/^#/);
+
+			my @F = split(/\t/);
+			$samples{$F[1]}++;
+		}
+	}
+
+	my $merged_sample_id = join "_", sort keys %samples;
+	return $merged_sample_id;
+}
+#-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------
 sub read_variants {
 	my $file = shift;
@@ -331,7 +509,7 @@ sub calculate_quasi_cliques {
     foreach my $allele (sort keys %$alleles){
     	push @sorted_alleles, $allele;
     }    
-#   print Dumper(\@sorted_alleles);
+  	#  print Dumper(\@sorted_alleles);
 
 	# Print out attributes file and names file for plotting in R (e.g., var or cons)
 	# Also add 'node_num' to $alleles
