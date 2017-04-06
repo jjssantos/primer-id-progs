@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 use strict;
 use warnings;
 use Getopt::Long;
@@ -9,16 +8,12 @@ use aomisc;
 
 my $PWD  = pwd_for_hpc();
 
-#my $SORTSAMJAR="/usr/local/bio_apps/picard-tools-1.75/SortSam.jar";
-#my $SORTSAMJAR=$PWD."/SortSam.jar";
 my $SORTSAM = $PWD . "/picard.jar SortSam";
 my $BWA=$PWD."/bwa";
-#my $BWA='/usr/local/bio_apps/bwa/bwa';
 my $INTERSECTBED=$PWD."/intersectBed";
 my $BAMTOBED=$PWD."/bamToBed";
 my $GET_MAJORITY_START_STOP_PL=$PWD."/get_majority_start_stop.pl";
 my $SAMTOOLS=$PWD."/samtools";
-#my $JAVA="/usr/local/bio_apps/java/bin/java";
 my $JAVA='java';
 my $p=8;						# Number of threads to use for BWA. 
 

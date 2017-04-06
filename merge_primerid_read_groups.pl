@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 use warnings;
 select STDOUT;		 # Turn off buffering for STDOUT for printing from multiple processes at the same time.
 $| = 1;
@@ -265,7 +264,7 @@ OPTIONS:
 # 2016-04-19
 # Added --plot_only
 # Allowing .fasta input again.
-# Added --temp_dir.  /tmp/ is default, but I want to try /hpcdata/scratch in case local /tmp is getting overloaded.
+# Added --temp_dir.  /tmp/ is default, but I want to try .../scratch in case local /tmp is getting overloaded.
 # 2016-06-18
 # UPdated samtools in repo to 1.3.  Added bcftools, vcfutils and seqtk to the repo. 
 #	Requires samtools, bcftools, vcfutils.pl and seqtk on the PATH.  

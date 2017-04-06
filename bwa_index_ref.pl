@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 #Add use lib statement to assume there is a directory at the same level as bin in which the script is run, called 'lib'
 use FindBin;
 use lib "$FindBin::Bin/../lib";
@@ -10,7 +9,6 @@ use warnings;
 use Getopt::Long;
 use aomisc;
 
-#my $BWA='/usr/local/bio_apps/bwa/bwa';
 my $PWD = pwd_for_hpc();
 my $BWA = $PWD . "/bwa";
 

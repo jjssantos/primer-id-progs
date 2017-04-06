@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 $| = 1;
 use strict;
 use warnings;

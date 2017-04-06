@@ -1,41 +1,37 @@
 # MAFFT
-export MAFFT_BINARIES=/nethome/oleraj/Apps/primer-id-progs/mafft-7.221/libexec/mafft
-	# Point to the correct directory for mafft to work
-export MAFFT_BINARIES=/home/oleraj/pid_tools/mafft-7.221/libexec/mafft
-	# This works on Helix.
+export MAFFT_BINARIES=/path/to/primer-id-progs/mafft-7.221/libexec/mafft
+	# Need to add environment variable MAFFT_BINARIES pointing to the correct directory for mafft to work
 
 # samtools, bcftools, seqtk, vcfutils.pl
-All of these can be ported to another system (Helix) and work (shows usage)
-I can remove samtools 0.1.18
+All of these can be ported to another system and work (shows usage)
 
 # Btrim64
-Ported to Helix and works (shows usage)
+Ported to another system and works (shows usage)
 
 # Clustalw2
-Ported to Helix and works (shows usage)
+Ported to another system and works (shows usage)
 
 # fastx_trimmer
-Ported to Helix and works (shows usage)
+Ported to another system and works (shows usage)
 
 # bedtools
-Ported to Helix and works (shows usage)
+Ported to another system and works (shows usage)
 
 # intersectBed genomeCoverageBed bamToBed
-Ported to Helix and they work as long as bedtools is in the same directory. These are just 2-line shell scripts that call bedtools. e.g., 
+Ported to another system and they work as long as bedtools is in the same directory. These are just 2-line shell scripts that call bedtools. e.g., 
 cat pid_tools/intersectBed 
 	#!/bin/sh
 	${0%/*}/bedtools intersect "$@"
 Probably not necessary to include these... make sure that I call the full command in my scripts "bedtools intersect", etc.
 
 # bam2fastx
-Ported to Helix and works (shows usage)
+Ported to another system and works (shows usage)
 
 # bwa
-Ported to Helix and works (shows usage)
+Ported to another system and works (shows usage)
 
 # picard.jar
-Ported to Helix and works (shows usage)
-I can remove SortSam jar file. * Make sure the command in the script is using picard.jar.
+Ported to another system and works (shows usage)
 
 # PANDAseq
 Not portable.  Need to recompile static version.

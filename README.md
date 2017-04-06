@@ -61,7 +61,9 @@ The commands below are suggestions.  You are welcome to put them together in a s
 3. Align with bwa mem and get coverage to see how many amplicons to expect and whether a gap or not. 
   ```
   bwa index HA_orf.fasta
-  for i in 151_62_S1 141_64_S1 141_65_S2; do echo $i; bwa mem -t 8 HA_orf.fasta ${i}_R1.fastq ${i}_R2.trim.fastq | samtools view -bS - > ${i}.bam; java -Xmx2G -jar ~/Apps/primer-id-progs/picard.jar SortSam I=${i}.bam CREATE_INDEX=true O=${i}.sort.bam SO=coordinate TMP_DIR=/hpcdata/scratch/; graph_coverage.pl --bam_file ${i}.sort.bam --output_dir ./ ; done
+  tempdir=temp	# Modify this to suit your environment
+  mkdir -p $tempdir
+  for i in 151_62_S1 141_64_S1 141_65_S2; do echo $i; bwa mem -t 8 HA_orf.fasta ${i}_R1.fastq ${i}_R2.trim.fastq | samtools view -bS - > ${i}.bam; java -Xmx2G -jar ~/Apps/primer-id-progs/picard.jar SortSam I=${i}.bam CREATE_INDEX=true O=${i}.sort.bam SO=coordinate TMP_DIR=$tempdir; graph_coverage.pl --bam_file ${i}.sort.bam --output_dir ./ ; done
   ```
   Takes 41 sec.
 
@@ -132,7 +134,7 @@ The commands below are suggestions.  You are welcome to put them together in a s
   ```
   Takes 5 sec.  Only one comparison.
 
-12. There are a few other steps that I haven't tested with this dataset at the moment, including `merge_tally.pl`, `combine_linkage_values.pl`, `compare_variant_frequencies.pl`, `primer_id_stats.pl`, and `graph_ambig_pos.R`.  I'll add some documentation for them at some point.  In the mean time, feel free to test them out. There is a usage statement for most that should describe how they are used (or you can inspect the script).
+12. There are a few other steps that I haven't tested with this dataset at the moment, including `merge_tally.pl`, `combine_linkage_values.pl`, `compare_variant_frequencies.pl`, `primerid_stats.pl`, and `graph_ambig_pos.R`.  I'll add some documentation for them at some point.  In the mean time, feel free to test them out. There is a usage statement for most that should describe how they are used (or you can inspect the script).
 
 ## Alternative procedures for convert_reads step for fasta file with > 20,000 reads
   Fasta files with a large number of reads can take a significant amount of RAM and time to complete the convert_reads step.  For example, it takes about 80 hours and 100GB RAM to process ~120,000 unique reads using 8 threads.  If you have more than about 20,000 unique reads in your dataset, it is recommended to split the input file, processing each file with convert_reads and then merging the output with `merge_tally.pl`.  This process can reduce the processing time to hours/minutes.  For example, a file with ~1.5 million unique reads split into files about 10,000 reads each will take about 30 min. to process if all ~150 convert_reads jobs are running in parallel. Tally files for nuc, codon, and aa are merged separately.  If desired, you can merge tally files for different amplicons of the same chromosome/segment using `merge_tally.pl` as well.  Simply put all of the files to merge in the same directory and pass the directory to the --input parameter for `merge_tally.pl`. The Phylip output (required for the next step, calculating linkage disequilibrium) is only available using the regular workflow.

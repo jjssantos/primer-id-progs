@@ -37,10 +37,7 @@ our @EXPORT = qw(
 	column_header_lookup_hash
 	bin_hash_of_values
 	trim
-	plot_venn
 	@SUFFIXES
-	make_hash_of_arrays_from_files
-	get_counts_matrix
 	scalar_HoA
 	check_for_Rscript
 	stats
@@ -97,6 +94,8 @@ our @EXPORT = qw(
 # Added if (defined($_)){ to trim subroutine.
 # 2013-11-12
 # Modified simple_hash subroutine to use //= for first and second column values, to allow zero to be a valid value.  
+# 2017-04-05
+# Removed subroutines to make venn diagram
 
 # philip
 sub pwd_for_hpc{
@@ -105,7 +104,7 @@ sub pwd_for_hpc{
     return join '/', @a[0..$#a-1]; # philip macmenamin 
 }
 # To Do
-# Move subroutines to make venn diagram into a separate module
+
 
 #-------------------------------------------------------------------------------
 #----------------------------------- FUNCTIONS ---------------------------------
@@ -661,261 +660,6 @@ sub bin_hash_of_values{
 		}
 		$lastbin = $bin+1;
 	}
-}
-#-------------------------------------------------------------------------------
-sub make_hash_of_arrays_from_files {
-	#Takes a reference file as input (or hashref with files as keys, name as value) and creates a Hash of Arrays where
-	#the key is the name and the value is an array of all of the lines within the file (by default, the full line as an arrayref; or first column only, optionally)
-	#By default, commented lines, beginning in # are ignored (i.e., only data lines
-	#stored.  By default, the whole line is saved, unless a value is supplied to $first_column_only.
-	#The input file must have the path to file in the first column and the second 
-	#column is an optional unique name.  (Instead of a reference file, this subroutine can 
-	#also take a hash ref where key = file path, value = unique name or "" or 1.  If the value is 1,
-	#this will not be used as a name.)
-	#The reason for the unique name is that using the full file name is often too long for downstream
-	#applications, such as labels for a venn diagram.  If no name-value is provided, the file
-	#basename will be used (minus dir, minus ext).
-	#In fact, the output of this subroutine can be sent to get_counts_matrix, and subsequently 
-	#to plot_venn to make venn diagrams (which is also the initial purpose of the subroutine).
-	#e.g., my $HoA = make_hash_of_arrays_from_files($ref_file_path,1);
-	#To prepare a hashref file before passing to the subroutine (not necessary), here are some examples of usage:
-	#e.g., my $files; foreach (@files){$files->{$_} = ""; }; my $HoA = make_hash_of_arrays_from_files($files,1);
-	#e.g., my $files = simple_hash($ref_file_path,0,1); my $HoA = make_hash_of_arrays_from_files($files,1);
-	#In the second example, the $ref_file_path is the path to a file that has first column, full path to file;
-	#second column, unique name to use.  
-	my $file_ref = shift;
-	my $first_column_only = shift;	#By default, it saves the whole line from the file, but in some instances, you might want to only get the first column.  This should be 1 if desired.
-
-	#Get hashref of file names.  
-	my $file_hashref;
-	if (-s $file_ref){
-		#input is a file with file paths, etc.  Get the files (and names, if there) and store in a hashref. 
-		$file_hashref = simple_hash($file_ref,0,1);
-	}
-	elsif (-e $file_ref){
-		#file exists, but nothing in it
-		warn "aomisc::make_hash_of_arrays_from_files error: empty file $file_ref\n"; return 0;
-	}
-	elsif(ref($file_ref) eq 'HASH'){
-		#already in hashref format.  
-		$file_hashref = $file_ref;
-	}
-	
-	
-	my $HoA;
-	my %names;
-	foreach my $file (keys %{$file_hashref}){
-		my $name;
-		if (defined($file_hashref->{$file})&&($file_hashref->{$file}=~ m/\w+/)&&($file_hashref->{$file} !~ m/^\d+$/) ){	#the value has to be defined (can't be ""), it has to have alphanumeric characters, and it can't only be numbers (which hints that it might have been created as a counting hash; we don't want to use the number as the name).
-			$name = $file_hashref->{$file};		
-		}
-		else {
-			$name = fileparse($file, @SUFFIXES) || warn "aomisc::make_hash_of_arrays_from_files could not get base name of file\n";
-		}
-		# Get rid of characters that could cause problems in R.
-		$name =~ s/-|;/./;
-		#Check if the unique name is really unique.  If not, it's not a lethal error, we just need to warn that we're merging multiple files here into the same arrayref. 
-		if (exists($names{$name})){
-			warn "aomisc::make_hash_of_arrays_from_files warning: name $name has already been used; pooling with previous file.\n";	
-		}
-		$names{$name}++;
-		my $readfh = open_to_read($file);
-		while(<$readfh>){
-			chomp;
-			next if ($_ =~ m/^#/);
-			my $value;
-			if ($first_column_only){
-				my @line = split("\t", $_);
-				$value = $line[0];
-			}
-			else {
-				$value = $_;
-			}
-			push @{$HoA->{$name}}, $value;
-		}
-		close($readfh); 
-	}
-	return $HoA;
-}
-#-------------------------------------------------------------------------------
-sub get_counts_matrix {
-	#Takes a HoA reference and prints out a file with a matrix of binary counts (1 for yes, 0 for no).
-	#Also returns the number of ids in at least one of the lists.  
-	#This file can be used as input to plot_venn subroutine to make Venn Diagrams based on the counts.  
-	#Format of input HoA reference is key: name; value: array of ids present.
-	#Some ids will be present in one list but not in others; 
-	#the output file will have a list of ids present in at least one list in the first column,
-	#followed by columns for each list with 1s and 0s, e.g., 
-#	#id	V3	V4
-#	294535	1	1
-#	139282	1	1
-#	7652	1	1
-#	585817	1	0
-#	520836	1	1
-#	320231	1	1
-	#To call, e.g., my $num_ids = get_counts_matrix($HoA);
-	#e.g., my $filebase = fileparse($file, @suffixes); my $matrix = $save_dir."/$filebase"."_matrix.txt"; my $num_ids = get_counts_matrix($HoA,$matrix);
-	my ($HoA,$filepath) = @_;
-	$filepath ||= 'temp_matrix.txt';	#Default name;		*** I should change this to be more unique in case multiple processes are running at the same time to avoid collisions.  
-	my $num_ids = 0;	#Count the total number of ids in at least one
-	
-	#Make a HoH so I can do quick lookups
-	my $HoH;
-	foreach my $key (sort keys (%$HoA)){
-		foreach my $id (@{$HoA->{$key}}){
-			$HoH->{$id}->{$key}++;
-		}
-	}
-	
-	my $writefh = open_to_write($filepath,0,0,1);	#quiet open because temp file
-	
-	#print header
-	my @keys = sort keys %{$HoA};
-	print $writefh "#id";
-	foreach my $key (@keys){
-		print $writefh "\t$key";
-	}
-	print $writefh "\n";
-
-	#print out matrix for this level
-	foreach my $id (keys %{$HoH}){
-		print $writefh "$id";
-		$num_ids++;
-		foreach my $key (@keys){
-			if (exists($HoH->{$id}->{$key})){
-				print $writefh "\t1";
-			}
-			else {
-				print $writefh "\t0";
-			}
-		}
-		print $writefh "\n";
-	}
-	
-	close($writefh);
-	return $num_ids;
-}
-#-------------------------------------------------------------------------------
-sub plot_venn {
-	#Takes a tab-delimited table of 1's and 0's and produces a venn diagram
-	#Requires a working version of R, including Rscript.
-	#Also requires installation of "limma" R library.
-		#To install, type these commands in an R terminal:
-			#source("http://www.bioconductor.org/biocLite.R")
-			#class(biocLite)
-			#biocLite("limma")
-		#To check for installation, type library(limma) in an R terminal.
-	#Requires 2, 3, or 4 datasets
-	#Column headers for data (not id) will be placed on Venn diagram, so don't make them too big.
-	#E.g., input data for 2 datasets (without #s, of course):
-#	#id	V3	V4
-#	294535	1	1
-#	139282	1	1
-#	7652	1	1
-#	585817	1	0
-#	520836	1	1
-#	320231	1	1
-	#To call: plot_venn("/path/to/data_file.txt", "figure", $verbose);
-	#Simplest: plot_venn("/path/to/data_file.txt");	
-	#Default for outfile is "figure_1" (or next number available), but it's nice to give it a real name.  
-	#Default for $verbose is 0.  Verbose will print out errors for R.
-	#File will be saved in same directory as datafile.
-
-
-	
-	my ($datafile,$outfile,$verbose) = @_;
-	
-	my $cwd = Cwd::cwd;
-	
-	#Test for number of datasets
-	my @names = get_header($datafile);
-	shift @names;	#get rid of "#id" column header.
-	my $num = scalar(@names);	#number of datasets
-	unless ( ($num>=2)&&($num<=4) ){
-		print STDERR "Venn diagrams will not be printed because the correct number of files was not input (i.e., 2, 3, or 4).\n";
-		return 0;
-	}
-	
-	#Test for required libraries	[I could make this into a subroutine, hand it an array of R modules to check...]
-	my $temp_file = "test.r";	#was "$cwd"."/test.r"; #changed because was getting some errors in directories with spaces.
-	my $testfh = open_to_write($temp_file,0,0,1);
-	print $testfh "library(limma)\n";
-	close($testfh);
-	my $error = `Rscript $temp_file 2>&1`;	#syntax from http://perldoc.perl.org/perlop.html#%60STRING%60
-	if ($error =~ m/Error/i){
-		print STDERR "Can\'t find limma library in R.  Attempting to install...\n";
-		#Write R script to install limma and run it.
-		my $install_file = "install_limma.r";
-		my $installfh = open_to_write($install_file,0,0,1);
-		print $installfh 'source("http://www.bioconductor.org/biocLite.R")'."\n".'class(biocLite)'."\n".'biocLite("limma")'."\n";
-		close ($installfh);
-		my $install_error = `Rscript $install_file`;
-#		print "err: $install_error\n"; #exit;
-		unlink($install_file);
-		#Retest for limma
-		my $error = `Rscript $temp_file 2>&1`;
-		if ($error =~ m/Error/i){
-			print STDERR "Unable to install limma library in R.  Please install by typing these commands into an R terminal:\n";
-			print STDERR 'source("http://www.bioconductor.org/biocLite.R")'."\n".'class(biocLite)'."\n".'biocLite("limma")'."\n";
-			return 0;
-		}
-		else {
-			print STDERR "limma library successfully installed!\n";
-		}
-	}
-	unlink($temp_file);
-	
-	
-	#####	Print venn diagrams with R		###
-	
-	#see http://stackoverflow.com/questions/3301694/running-r-scripts-with-plots
-	
-	my $names = join ", ", sort @names;	#get from file header
-	
-	#Initialize script file
-	my ($filename,$save_dir,$ext) = fileparse($datafile,@SUFFIXES);
-	$save_dir ||= $cwd;
-#	$outfile ||= get_file_num($save_dir, "figure", "png");	#$outfile is the file name without the extension.  We will add that later.
-	$outfile ||= get_file_num($save_dir, "figure", "pdf");	#$outfile is the file name without the extension.  We will add that later.
-	$outfile = fileparse($outfile,@SUFFIXES);  	#remove the extension and directory in case get_file_num added one.  
-
-	my $script_path= "$save_dir/$outfile"."_script.r";
-	my $writefh = open_to_write($script_path,0,0,1);
-	my $dirname = dirname(__FILE__);	#print "dir: $dirname\n";	#Will provide the directory in which this module (aomisc.pm) is found.  I will try to distribute aomisc.pm with Venn.R, so it will be in the same directory.
-	my $cex = "";
-#	if ($num<4){
-		$cex='cex=1,';	#This is optimal, based on the circles that are drawn.  
-#	}
-	
-	#Write script
-	print $writefh "library(limma)\n";
-	print $writefh "require(\"$dirname/Venn.R\")\n";
-	$dirname =~ s/bin$/lib/ if ($dirname =~ m/bin$/);
-	print $writefh "require(\"$dirname/Venn.R\")\n";	# sometimes it calls $dirname the bin directory instead of the lib directory where aomisc.pm is found
-	print $writefh 'require("http://bioinfo-mite.crb.wsu.edu/Rcode/Venn.R")'. "\n";	#Venn.R is required for drawing venn Diagrams with 4 datasets.
-	print $writefh "data<-read.delim(\"$datafile\", sep = \"\\t\", header=TRUE)\n";
-	print $writefh "attach(data)\n";
-	foreach my $name (sort @names){
-		print $writefh "$name<-($name>0)\n";
-	}
-	print $writefh "matrix<-cbind($names)\n";
-	print $writefh "counts<-vennCounts(matrix)\n";
-#	print $writefh "png(filename=\"$save_dir/$outfile".".png\")\n";
-	print $writefh "pdf(file=\"$save_dir/$outfile".".pdf\")\n";
-	print $writefh "vennDiagram(counts, $cex lwd=2, main=\"\\n$outfile\", cex.main=1.5)\n";	
-	#print $writefh "dev.off()\n";
-	close ($writefh);
-	
-	#Run script
-	$! = undef;
-	system("Rscript $script_path");
-	if ($verbose){	
-		if ($!){
-			warn "Error: $!\n";	
-		}
-	}
-	return 1;
-
 }
 #-------------------------------------------------------------------------------
 sub get_header {

@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-#	#!/usr/local/bio_apps/perl-5.16.2/bin/perl
 
 #Add use lib statement to assume there is a directory at the same level as bin in which the script is run, called 'lib'
 use FindBin;
@@ -17,7 +16,6 @@ use aomisc;
 my $output_dir = '';
 my $meta_file = '';
 my $PWD = pwd_for_hpc();
-#my $SAMTOOLS = '/usr/local/bio_apps/samtools/samtools';
 my $SAMTOOLS = $PWD . "/samtools";
 
 GetOptions('output_dir=s'=>\$output_dir,
