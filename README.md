@@ -216,7 +216,7 @@ _Used by `bwa_index_ref.pl`, `concatenate_fastq.pl`, `get_majority_block_bam.pl`
 
 Li H. (2013) Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv:1303.3997v2 
 
-### [MAFFT](http://mafft.cbrc.jp/alignment/software/)
+#### [MAFFT](http://mafft.cbrc.jp/alignment/software/)
 _Used by `merge_primerid_read_groups.pl`_
 
 Katoh, Standley 2013 MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780.  PMID: 23329690. 
