@@ -176,7 +176,82 @@ Takes 6 sec.
 
 
 # Software terms of use
-Use of this software prior to publication constitutes a collaboration. Please see Chris Brooke who has a copy of the terms of use.  Use and distribution of the external dependencies is subject to their respective licenses.
+Use of this software prior to publication constitutes a collaboration. Please see Chris Brooke who has a copy of the terms of use.  Use and distribution of the external dependencies is subject to their respective licenses (see below).
+
+## Public Domain license
+
+The software in this repository authored by officers or employees of the National Institutes of Health (NIH) is free and unencumbered software released into the public domain. This does not include third-party software also included in the repository; see below for details on third-party software licenses.
+</br>*Be kind, and provide attribution when you use this code.*
+
+United States government creative works, including writing, images, and computer code, are usually prepared by officers or employees of the United States government as part of their official duties. A government work is generally not subject to copyright in the United States and there is generally no copyright restriction on reproduction, derivative works, distribution, performance, or display of a government work. Unless the work falls under an exception, anyone may, without restriction under U.S. copyright laws:
+
+* Reproduce the work in print or digital form
+* Create derivative works
+* Perform the work publicly
+* Display the work
+* Distribute copies or digitally transfer the work to the public by sale or other transfer of ownership, or by rental, lease, or lending
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+Learn more about how copyright applies to U.S. government works at [USA.gov](https://www.usa.gov/government-works)
+
+
+## Attribution for Third-Party Software
+
+This repository includes open-source third-party applications in object (binary) form. See corresponding links below for license and copyright notices.  Please cite applicable references below if using this software in your research (in addition to citing this repository itself).
+
+#### [Samtools](http://www.htslib.org/)
+_Used by `merge_primerid_read_groups.pl` and `primerid_stats.pl` and included for convenience to manipulate SAM/BAM files_
+Li H., Handsaker B., Wysoker A., Fennell T., Ruan J., Homer N., Marth G., Abecasis G., Durbin R. and 1000 Genome Project Data Processing Subgroup (2009) The Sequence alignment/map (SAM) format and SAMtools. Bioinformatics, 25, 2078-9. PMID: 19505943.
+
+#### [BWA](https://github.com/lh3/bwa)
+_Used by `bwa_index_ref.pl`, `concatenate_fastq.pl`, `get_majority_block_bam.pl` and `merge_primerid_read_groups.pl` and also included for convenience to map reads to a reference_
+Li H. (2013) Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv:1303.3997v2 
+
+### [MAFFT](http://mafft.cbrc.jp/alignment/software/)
+_Used by `merge_primerid_read_groups.pl`_
+Katoh, Standley 2013 MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780.  PMID: 23329690. 
+
+#### [PANDAseq](https://github.com/neufeld/pandaseq) 
+_Included for convenience to merge overlapping paired-end reads_
+Andre P Masella, Andrea K Bartram, Jakub M Truszkowski, Daniel G Brown and Josh D Neufeld. PANDAseq: paired-end assembler for illumina sequences. BMC Bioinformatics 2012, 13:31. http://www.biomedcentral.com/1471-2105/13/31 PMID: 22333067.
+Source code for v2.9 is included as a git submodule.
+
+#### [BEDTools](https://github.com/arq5x/bedtools2)
+_Used by `graph_coverage.pl`, `get_majority_block_bam.pl`, and `get_majority_block_bam.pl`
+Quinlan AR and Hall IM, 2010. BEDTools: a flexible suite of utilities for comparing genomic features. Bioinformatics. 26, 6, pp. 841–842. PMID: 20110278.
+
+#### [Btrim](http://graphics.med.yale.edu/trim/)
+_Included for convenience to trim primer sequences from reads and to split reads into separate amplicon groups_
+Kong, Y (2011) Btrim: A fast, lightweight adapter and quality trimming program for next-generation sequencing technologies. Genomics, 98, 152-153. http://dx.doi.org/10.1016/j.ygeno.2011.05.009 PMID: 21651976.
+
+#### [Picard](https://github.com/broadinstitute/picard)
+_Used by `get_majority_block_bam.pl` and included for convenience to manipulate SAM/BAM files_
+Cite: https://broadinstitute.github.io/picard/
+
+#### [Seqtk](https://github.com/lh3/seqtk)
+_Used by `merge_primerid_read_groups.pl`_
+Cite: https://github.com/lh3/seqtk
+
+#### [ClustalW2](ftp://ftp.ebi.ac.uk/pub/software/clustalw2/)
+_Used `merge_primerid_read_groups.pl` when option `--clustalw` is selected_
+Larkin MA, Blackshields G, Brown NP, Chenna R, McGettigan PA, McWilliam H, Valentin F, Wallace IM, Wilm A, Lopez R, Thompson JD, Gibson TJ and Higgins DG. Bioinformatics 2007 23(21): 2947-2948. doi:10.1093/bioinformatics/btm404 PMID: 17846036 
+
+#### [FASTX-Toolkit](http://hannonlab.cshl.edu/fastx_toolkit/)
+_`fastx_trimmer` included for convenience to trim nucleotides from reads_
+Cite: https://github.com/agordon/fastx_toolkit
+
+#### [TopHat2](https://ccb.jhu.edu/software/tophat/manual.shtml)
+_`bam2fastx` used by `merge_primerid_read_groups.pl`_
+Kim D, Pertea G, Trapnell C, Pimentel H, Kelley R, Salzberg SL. TopHat2: accurate alignment of transcriptomes in the presence of insertions, deletions and gene fusions. Genome Biology 2013, 14:R36. PMID: 23618408.
+
+
 
 
 # Notes for running on NIAID Locus.
