@@ -1,0 +1,3 @@
+[submodule "pandaseq"]
+	path = pandaseq
+	url = https://github.com/neufeld/pandaseq.git
