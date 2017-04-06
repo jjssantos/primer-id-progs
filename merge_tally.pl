@@ -43,8 +43,6 @@ use Data::Dumper;
 if (@ARGV){		print STDERR "Arguments: ", join " ", @ARGV, "\n";	}
 
 my $PWD = pwd_for_hpc();
-#my $mafft_bin = $PWD.'/mafft'; # philip
-my $mafft_bin = 'mafft';
 
 my $save;
 my $dir;
