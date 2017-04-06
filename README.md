@@ -10,7 +10,7 @@ You can download the output files expected for running these commands here:
 https://drive.google.com/open?id=0B_uaeWUQ6aiJNFRkNkZWMl9qMzA
 
 ## Preparing the environment
-Before running the commands, make sure that you have a version of Perl on your PATH that has the necessary modules installed.  This has been tested with Perl 5.22.1.  Some of the required libraries are 
+Before running the commands, make sure that you have a version of Perl on your PATH that has the necessary modules installed.  This has been tested with Perl 5.22.1 in a Linux environment (RHEL).  Some of the required libraries are 
 
 * BioPerl, including
   * Bio::Tools::Run::Alignment::Clustalw
@@ -117,7 +117,7 @@ The commands below are suggestions.  You are welcome to put them together in a s
   ```
   Takes 5 min. 21 sec.
   
-  If you have a large number of unique reads in your dataset (i.e., > 20,000) and you only need frequency tables, it is recommended to follow the alternative procedure described in the section below titled "Alternative procedure for convert_reads step".
+  If you have a large number of unique reads in your dataset (i.e., > 20,000) and you only need frequency tables, it is recommended to follow one of the alternative procedures described in the section below titled "Alternative procedures for convert_reads step".
 
 11. Calculate linkage disequilibrium for all variants found above a certain frequency level 
   You can choose whatever threshold you would like.  It will first calculate the number of comparisons that will be performed, and then will give an estimate of the time it will take.  Right now the estimates are a little off, so it will take *longer* than the estimated time most likely.
@@ -132,11 +132,11 @@ The commands below are suggestions.  You are welcome to put them together in a s
   ```
   Takes 5 sec.  Only one comparison.
 
-12. There are a few other steps that I haven't tested with this dataset at the moment, including `merge_overlapping_tally_regions.pl`, `combine_linkage_values.pl`, `compare_variant_frequencies.pl`, `primer_id_stats.pl`, and `graph_ambig_pos.R`.  I'll add some documentation for them at some point.  In the mean time, feel free to test them out. There is a usage statement for most that should describe how they are used (or you can inspect the script).
+12. There are a few other steps that I haven't tested with this dataset at the moment, including `merge_tally.pl`, `combine_linkage_values.pl`, `compare_variant_frequencies.pl`, `primer_id_stats.pl`, and `graph_ambig_pos.R`.  I'll add some documentation for them at some point.  In the mean time, feel free to test them out. There is a usage statement for most that should describe how they are used (or you can inspect the script).
 
-## Alternative procedure for convert_reads step for fasta file with > 20,000 reads
-  Fasta files with a large number of reads can take a significant amount of RAM and time to complete the convert_reads step.  For example, it takes about 80 hours and 100GB RAM to process ~120,000 unique reads using 8 threads.  If you have more than about 20,000 unique reads in your dataset, it is recommended to split the input file, processing each file with convert_reads and then merging the output with merge_tally.pl.  This process can reduce the processing time to hours/minutes.  For example, a file with ~1.5 million unique reads split into files about 10,000 reads each will take about 30 min. to process if all ~150 convert_reads jobs are running in parallel. Tally files for nuc, codon, and aa are merged separately.  If desired, you can merge tally files for different amplicons of the same chromosome/segment using merge_tally as well.  Simply put all of the files to merge in the same directory and The Phylip output (required for the next step, calculating linkage disequilibrium) is only available using the regular workflow.
-  To try this procedure with the tutorial files, start with the \*.cons.fasta files after the merge_primerid_read_groups step.  First split the files into ~100 reads each (in reality, you would only need to do this procedure with much larger datasets and you would split them into files of about 10,000 reads each).  We'll use the Unix `split` command to do this. To keep one merged output file for each amplicon, follow procedure 1 below and to merge all amplicons of a segment/chromosome into one file, follow procedure 2 below.
+## Alternative procedures for convert_reads step for fasta file with > 20,000 reads
+  Fasta files with a large number of reads can take a significant amount of RAM and time to complete the convert_reads step.  For example, it takes about 80 hours and 100GB RAM to process ~120,000 unique reads using 8 threads.  If you have more than about 20,000 unique reads in your dataset, it is recommended to split the input file, processing each file with convert_reads and then merging the output with `merge_tally.pl`.  This process can reduce the processing time to hours/minutes.  For example, a file with ~1.5 million unique reads split into files about 10,000 reads each will take about 30 min. to process if all ~150 convert_reads jobs are running in parallel. Tally files for nuc, codon, and aa are merged separately.  If desired, you can merge tally files for different amplicons of the same chromosome/segment using `merge_tally.pl` as well.  Simply put all of the files to merge in the same directory and pass the directory to the --input parameter for `merge_tally.pl`. The Phylip output (required for the next step, calculating linkage disequilibrium) is only available using the regular workflow.
+  To try this procedure with the tutorial files, start with the \*.cons.fasta files after the merge_primerid_read_groups step.  First split the files into ~100 reads each (in reality, you would only need to do this procedure with much larger datasets and you would split them into files of about 10,000 reads each).  We'll use the Unix `split` command to do this. To keep one merged output file for each amplicon, follow procedure 1 below. To merge frequency tables for all amplicons of a segment/chromosome into one file, follow procedure 2 below.
 
 ### Procedure 1 (keep amplicons separate): 
   Create a separate directory for each amplicon and split the reads for the amplicon into that directory.  Use -l 200 to get 100 reads per file.
@@ -149,13 +149,13 @@ Now run convert_reads for each split fasta file.
 for dir in *_split; do for file in $dir/*fasta; do convert_reads_to_amino_acid.pl --files $file --ref HA_orf.fasta --prefix ${file/.fasta/} -p 8; done; done 
 ```
 Takes 7 min.
-Now merge the reads with merge_tally.pl
+Now merge the reads with `merge_tally.pl`
 ```
 for dir in *_split; do sample=${dir/_split/}; sample=${sample/.contigs.pid.btrim/}; merge_tally.pl -i $dir --prefix Merged --sample $sample; done
 ```
 Takes 8 sec.
 
-### Procedure 2 (merge amplicons belonging to the same segment):
+### Procedure 2 (merge data for amplicons belonging to the same segment):
 Create separate directory for each sample (and segment if you are assessing multiple segments) and split the reads into that directory.  Use -l 200 to get 100 reads per file.
 ```
 for i in 151_62_S1 141_64_S1 141_65_S2; do mkdir ${i}_split; done
@@ -166,7 +166,7 @@ Now run convert_reads for each split fasta file.
 for dir in *_split; do for file in $dir/*fasta; do convert_reads_to_amino_acid.pl --files $file --ref HA_orf.fasta --prefix ${file/.fasta/} -p 8; done; done
 ```
 Takes 7 min.
-Now merge the reads for each sample with merge_tally.pl
+Now merge the reads for each sample with `merge_tally.pl`
 ```
 for dir in *_split; do sample=${dir/_split/}; merge_tally.pl -i $dir --prefix Merged --sample $sample; done
 ```
