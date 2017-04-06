@@ -208,47 +208,58 @@ This repository includes open-source third-party applications in object (binary)
 
 #### [Samtools](http://www.htslib.org/)
 _Used by `merge_primerid_read_groups.pl` and `primerid_stats.pl` and included for convenience to manipulate SAM/BAM files_
+
 Li H., Handsaker B., Wysoker A., Fennell T., Ruan J., Homer N., Marth G., Abecasis G., Durbin R. and 1000 Genome Project Data Processing Subgroup (2009) The Sequence alignment/map (SAM) format and SAMtools. Bioinformatics, 25, 2078-9. PMID: 19505943.
 
 #### [BWA](https://github.com/lh3/bwa)
 _Used by `bwa_index_ref.pl`, `concatenate_fastq.pl`, `get_majority_block_bam.pl` and `merge_primerid_read_groups.pl` and also included for convenience to map reads to a reference_
+
 Li H. (2013) Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv:1303.3997v2 
 
 ### [MAFFT](http://mafft.cbrc.jp/alignment/software/)
 _Used by `merge_primerid_read_groups.pl`_
+
 Katoh, Standley 2013 MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780.  PMID: 23329690. 
 
 #### [PANDAseq](https://github.com/neufeld/pandaseq) 
 _Included for convenience to merge overlapping paired-end reads_
+
 Andre P Masella, Andrea K Bartram, Jakub M Truszkowski, Daniel G Brown and Josh D Neufeld. PANDAseq: paired-end assembler for illumina sequences. BMC Bioinformatics 2012, 13:31. http://www.biomedcentral.com/1471-2105/13/31 PMID: 22333067.
 Source code for v2.9 is included as a git submodule.
 
 #### [BEDTools](https://github.com/arq5x/bedtools2)
-_Used by `graph_coverage.pl`, `get_majority_block_bam.pl`, and `get_majority_block_bam.pl`
+_Used by `graph_coverage.pl`, `get_majority_block_bam.pl`, and `get_majority_block_bam.pl`_
+
 Quinlan AR and Hall IM, 2010. BEDTools: a flexible suite of utilities for comparing genomic features. Bioinformatics. 26, 6, pp. 841–842. PMID: 20110278.
 
 #### [Btrim](http://graphics.med.yale.edu/trim/)
 _Included for convenience to trim primer sequences from reads and to split reads into separate amplicon groups_
+
 Kong, Y (2011) Btrim: A fast, lightweight adapter and quality trimming program for next-generation sequencing technologies. Genomics, 98, 152-153. http://dx.doi.org/10.1016/j.ygeno.2011.05.009 PMID: 21651976.
 
 #### [Picard](https://github.com/broadinstitute/picard)
 _Used by `get_majority_block_bam.pl` and included for convenience to manipulate SAM/BAM files_
+
 Cite: https://broadinstitute.github.io/picard/
 
 #### [Seqtk](https://github.com/lh3/seqtk)
 _Used by `merge_primerid_read_groups.pl`_
+
 Cite: https://github.com/lh3/seqtk
 
 #### [ClustalW2](ftp://ftp.ebi.ac.uk/pub/software/clustalw2/)
 _Used `merge_primerid_read_groups.pl` when option `--clustalw` is selected_
+
 Larkin MA, Blackshields G, Brown NP, Chenna R, McGettigan PA, McWilliam H, Valentin F, Wallace IM, Wilm A, Lopez R, Thompson JD, Gibson TJ and Higgins DG. Bioinformatics 2007 23(21): 2947-2948. doi:10.1093/bioinformatics/btm404 PMID: 17846036 
 
 #### [FASTX-Toolkit](http://hannonlab.cshl.edu/fastx_toolkit/)
 _`fastx_trimmer` included for convenience to trim nucleotides from reads_
+
 Cite: https://github.com/agordon/fastx_toolkit
 
 #### [TopHat2](https://ccb.jhu.edu/software/tophat/manual.shtml)
 _`bam2fastx` used by `merge_primerid_read_groups.pl`_
+
 Kim D, Pertea G, Trapnell C, Pimentel H, Kelley R, Salzberg SL. TopHat2: accurate alignment of transcriptomes in the presence of insertions, deletions and gene fusions. Genome Biology 2013, 14:R36. PMID: 23618408.
 
 
