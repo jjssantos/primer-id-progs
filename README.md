@@ -30,9 +30,9 @@ To use the modules in the repository, modify your PERL5LIB to include the `prime
 export PERL5LIB=/path/to/primer-id-progs:$PERL5LIB
 ```
 
-The primerID workflow also depends on a number of external dependencies.  Binary executables for most of these dependencies have been provided.  In order to use these, modify your PATH variable to include the `primer-id-progs` directory and the directory to the `mafft` binary, e.g.,
+The primerID workflow also depends on a number of external dependencies.  Binary executables for most of these dependencies have been provided.  In order to use these, modify your PATH variable to include the `primer-id-progs` directory and the directory to the `mafft` and `pandaseq` binaries, e.g.,
 ```
-export PATH=/path/to/primer-id-progs:/path/to/primer-id-progs/mafft-7.221:$PATH
+export PATH=/path/to/primer-id-progs:/path/to/primer-id-progs/mafft-7.221:/path/to/primer-id-progs/pandaseq-2.9:$PATH
 ```
 For mafft to work, you also need to set this environment variable, pointing to the directory containing the mafft binary files (modify to suit your environment):
 ```
