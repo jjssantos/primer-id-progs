@@ -247,7 +247,7 @@ _Used by `merge_primerid_read_groups.pl`_
 
 Cite: https://github.com/lh3/seqtk
 
-#### [ClustalW2](ftp://ftp.ebi.ac.uk/pub/software/clustalw2/)
+#### [ClustalW2](http://www.ebi.ac.uk/Tools/msa/clustalw2/help/)
 _Used `merge_primerid_read_groups.pl` when option `--clustalw` is selected_
 
 Larkin MA, Blackshields G, Brown NP, Chenna R, McGettigan PA, McWilliam H, Valentin F, Wallace IM, Wilm A, Lopez R, Thompson JD, Gibson TJ and Higgins DG. Bioinformatics 2007 23(21): 2947-2948. doi:10.1093/bioinformatics/btm404 PMID: 17846036 
