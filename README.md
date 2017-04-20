@@ -30,7 +30,7 @@ To use the modules in the repository, modify your PERL5LIB to include the `prime
 export PERL5LIB=/path/to/primer-id-progs:$PERL5LIB
 ```
 
-The primerID workflow also depends on a number of external dependencies.  Binary executables for most of these dependencies have been provided.  In order to use these, modify your PATH variable to include the `primer-id-progs` directory and the directory to the `mafft` and `pandaseq` binaries, e.g.,
+The primerID workflow also depends on a number of third-party dependencies.  Binary executables for most of these dependencies have been provided.  In order to use these, modify your PATH variable to include the `primer-id-progs` directory and the directory to the `mafft` and `pandaseq` binaries, e.g.,
 ```
 export PATH=/path/to/primer-id-progs:/path/to/primer-id-progs/mafft-7.221:/path/to/primer-id-progs/pandaseq-2.9:$PATH
 ```
@@ -180,7 +180,8 @@ Use of this software prior to publication constitutes a collaboration. Please se
 
 ## Public Domain license
 
-The software in this repository authored by officers or employees of the National Institutes of Health (NIH) is free and unencumbered software released into the public domain. This does not include third-party software also included in the repository; see below for details on third-party software licenses.
+The software in this repository authored by officers or employees of the National Institutes of Health (NIH) is free and unencumbered software released into the public domain. (Note that third-party software is also included in this repository, which falls under a different license or licenses. See "Attribution for Third-Party Software" below for details on third-party software licenses.)
+
 </br>*Be kind, and provide attribution when you use this code.*
 
 United States government creative works, including writing, images, and computer code, are usually prepared by officers or employees of the United States government as part of their official duties. A government work is generally not subject to copyright in the United States and there is generally no copyright restriction on reproduction, derivative works, distribution, performance, or display of a government work. Unless the work falls under an exception, anyone may, without restriction under U.S. copyright laws:
@@ -216,7 +217,7 @@ _Used by `bwa_index_ref.pl`, `concatenate_fastq.pl`, `get_majority_block_bam.pl`
 
 Li H. (2013) Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM. arXiv:1303.3997v2 
 
-### [MAFFT](http://mafft.cbrc.jp/alignment/software/)
+#### [MAFFT](http://mafft.cbrc.jp/alignment/software/)
 _Used by `merge_primerid_read_groups.pl`_
 
 Katoh, Standley 2013 MAFFT multiple sequence alignment software version 7: improvements in performance and usability. Molecular Biology and Evolution 30:772-780.  PMID: 23329690. 
