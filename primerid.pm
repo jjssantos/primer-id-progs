@@ -280,24 +280,9 @@ sub get_unambig_values {
 
 	my $unambig_residues = get_unambig_tally($nuc_aa_codon_tally->{$type}->{$pos}, $type, $converter);	 # Returns hashref with the ambiguous residues removed
 	my $unambig_coverage = total(values(%$unambig_residues));
-	my $unambig_consensus_with_num = find_key_with_biggest_value($unambig_residues, 2);
-	my ($unambig_consensus,$num_unambig_consensus) = split(/, /, $unambig_consensus_with_num);
-	my $num_unambig_nonconsensus = $unambig_coverage - $num_unambig_consensus;
-	my $tally_without_consensus = remove_one_from_tally($unambig_residues,$unambig_consensus);
-	my ($major_alt_allele,$num_major_alt_allele) = ("", 0);	# Default empty, in case there is no alternate allele.
-	if (%$tally_without_consensus){
-		# Then there are alternate allele(s)
-		my $major_alt_alleles = find_key_with_biggest_value($tally_without_consensus, 2, 1);	# returns AoA of all max alleles (will usually be an AoA with just one entry, but will have multiple entries if there is a tie for the max number)
-		my @alt_alleles;
-		my @alt_counts;
-		foreach (sort @$major_alt_alleles){
-			my ($alt,$count) = @$_;
-			#print STDERR "alt: $alt, $count\n";
-			push @alt_alleles, $alt;
-			push @alt_counts, $count;
-		}
-		$major_alt_allele = join ",", @alt_alleles;
-		$num_major_alt_allele  = join ",", @alt_counts;
+	if ($verbose && scalar(keys %$unambig_residues) == 0){
+		carp "Probably only ambiguous residues in hash to begin with, so after removing ambiguous characters, you have an empty hash.\nType, Pos: $type, $pos\n";
+		carp Dumper($nuc_aa_codon_tally->{$type}->{$pos});
 	}
 	
 	if ($verbose){		# $num_unambig_nonconsensus > 0 && 
@@ -306,10 +291,48 @@ sub get_unambig_values {
 		print STDERR "unambig\n";
 		print STDERR Dumper($unambig_residues);
 		print STDERR "unambig_cov: $unambig_coverage\n";
-		print STDERR "tally without consensus\n";
-		print STDERR Dumper($tally_without_consensus);
-		print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n\n";
-		#exit;
+	}
+
+	my ($unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele);
+
+	if (scalar(keys %$unambig_residues) > 0){
+		my $unambig_consensus_with_num = find_key_with_biggest_value($unambig_residues, 2);
+		($unambig_consensus,$num_unambig_consensus) = split(/, /, $unambig_consensus_with_num);
+		$num_unambig_nonconsensus = $unambig_coverage - $num_unambig_consensus;
+		carp "WARNING: negative residue count!" if ($num_unambig_nonconsensus < 0);		# Just in case...
+		my $tally_without_consensus = remove_one_from_tally($unambig_residues,$unambig_consensus);
+		($major_alt_allele,$num_major_alt_allele) = ("", 0);	# Default empty, in case there is no alternate allele.
+		if (%$tally_without_consensus){
+			# Then there are alternate allele(s)
+			my $major_alt_alleles = find_key_with_biggest_value($tally_without_consensus, 2, 1);	# returns AoA of all max alleles (will usually be an AoA with just one entry, but will have multiple entries if there is a tie for the max number)
+			my @alt_alleles;
+			my @alt_counts;
+			foreach (sort @$major_alt_alleles){
+				my ($alt,$count) = @$_;
+				#print STDERR "alt: $alt, $count\n";
+				push @alt_alleles, $alt;
+				push @alt_counts, $count;
+			}
+			$major_alt_allele = join ",", @alt_alleles;
+			$num_major_alt_allele  = join ",", @alt_counts;
+		}
+		
+		if ($verbose){		# $num_unambig_nonconsensus > 0 && 
+			print STDERR "tally without consensus\n";
+			print STDERR Dumper($tally_without_consensus);
+			print STDERR "major alt: $major_alt_allele, $num_major_alt_allele\n\n";
+			#exit;
+		}
+	}
+	else {
+		# Only ambiguous residues at this position
+		print STDERR "WARNING: Only ambiguous residues present at $type position $pos!\n";
+		$unambig_coverage 			= 0;
+		$unambig_consensus 			= "None";
+		$num_unambig_consensus 		= 0;
+		$num_unambig_nonconsensus 	= 0;
+		$major_alt_allele 			= "None";
+		$num_major_alt_allele 		= 0;
 	}
 	return ($unambig_coverage, $unambig_consensus, $num_unambig_consensus, $num_unambig_nonconsensus, $major_alt_allele, $num_major_alt_allele);
 }
