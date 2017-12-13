@@ -1,5 +1,5 @@
 # Description
-Pipeline to process data produced using the PrimerID method for amplicon sequencing to generate viral population frequency tables for nucleotides and amino acids.
+Workflow to process data produced using the PrimerID method for amplicon sequencing to generate viral population frequency tables for nucleotides and amino acids.
 
 # Tutorial
 
@@ -177,6 +177,7 @@ Takes 6 sec.
 
 # Software terms of use
 Use of this software prior to publication constitutes a collaboration. Please see Chris Brooke who has a copy of the terms of use.  Use and distribution of the external dependencies is subject to their respective licenses (see below).
+The manuscript describing the pipeline has been accepted and is pending publication; please cite this manuscript once it has been published.
 
 ## Public Domain license
 
