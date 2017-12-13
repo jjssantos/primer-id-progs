@@ -1,5 +1,5 @@
-# primer-id-progs
-Programs needed to run the PrimerID pipeline
+# Description
+Pipeline to process data produced using the PrimerID method for amplicon sequencing to generate viral population frequency tables for nucleotides and amino acids.
 
 # Tutorial
 
