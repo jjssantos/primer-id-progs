@@ -175,9 +175,9 @@ for dir in *_split; do sample=${dir/_split/}; merge_tally.pl -i $dir --prefix Me
 Takes 6 sec.
 
 
-# Software terms of use
-Use of this software prior to publication constitutes a collaboration. Please see Chris Brooke who has a copy of the terms of use.  Use and distribution of the external dependencies is subject to their respective licenses (see below).
-The manuscript describing the pipeline has been accepted and is pending publication; please cite this manuscript once it has been published.
+# Publication
+Please cite this manuscript describing the pipeline if you use this software:
+Kosik I, Ince WL, Gentles LE, Oler AJ, Kosikova M, Angel M,  Magadán JG, Xie H, Brooke CB, Yewdell JW. (2018) Influenza A virus hemagglutinin glycosylation compensates for antibody escape fitness costs. PLoS Pathog 14(1): e1006796. https://doi.org/10.1371/journal.ppat.1006796
 
 ## Public Domain license
 
@@ -206,7 +206,7 @@ Learn more about how copyright applies to U.S. government works at [USA.gov](htt
 
 ## Attribution for Third-Party Software
 
-This repository includes open-source third-party applications in object (binary) form. See corresponding links below for license and copyright notices.  Please cite applicable references below if using this software in your research (in addition to citing this repository itself).
+This repository includes open-source third-party applications in object (binary) form. See corresponding links below for license and copyright notices.  Please cite applicable references below if using this software in your research (in addition to citing the Kosik et al. PLoS Pathogens 2018 paper).
 
 #### [Samtools](http://www.htslib.org/)
 _Used by `merge_primerid_read_groups.pl` and `primerid_stats.pl` and included for convenience to manipulate SAM/BAM files_
